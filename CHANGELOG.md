@@ -6,6 +6,17 @@ All notable changes to this project. Versions follow the Northstar app tags. Dat
 - Public docs: README, `docs/` pages, CONTRIBUTING, SECURITY, LICENSE (proprietary, all rights reserved), issue/PR templates, release notes.
 - Removed the internal ops log and business plan from `docs/`. Roadmap scrubbed.
 
+## v0.5.0 — 2026-10-12
+
+Local only: `PUBLISH_DRY_RUN=true`. No schema change; Northstar app unchanged.
+
+### Added
+- `selfheal/`: light self-heal supervisor (5 min loop via `services-watchdog.sh`): health checks, backoff-limited restarts through the service scripts, safe Chrome/tab reaping, one retry for allowlisted idempotent n8n workflows only, draft fixes (re-queue for rebuild, block `<<<`), audit TSV and JSON alerts. Hard limits enforced in code and tests.
+
+### Fixed
+- Chrome pile-up: under load the 3 s CDP check failed and `start` removed the profile's Singleton lock and launched another sandboxed Chrome on the same profile (bwrap's pid namespace hides the lock owner). `bin/client1-chrome.sh` now waits 10 s (`CDP_TIMEOUT`) and refuses to launch while a Chrome for the profile is alive.
+- client0-state: dry-run publishes are logged as `dry_run`, not `issued`, so they no longer count toward the daily caps (documented in `clients/client0/README.md`). client1-state unchanged (no dry-run publish path).
+
 ## v0.4.0 — 2026-10-12
 
 Local demo only: `PUBLISH_DRY_RUN=true`. No schema change.

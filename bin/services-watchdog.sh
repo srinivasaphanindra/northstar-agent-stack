@@ -29,6 +29,8 @@ pass(){
     log "client1-state DOWN -> start"; "$B/client1-state-up.sh" start >> "$L" 2>&1 || log "ERROR client1-state start failed"; fixed=1; fi
   if ! "$B/northstar-app-up.sh" status >/dev/null 2>&1; then
     log "northstar-app DOWN -> start"; "$B/northstar-app-up.sh" start >> "$L" 2>&1 || log "ERROR northstar-app start failed"; fixed=1; fi
+  # v0.5 self-heal supervisor (own flock; no-op if already running)
+  python3 "$(dirname "$B")/selfheal/selfheal.py" ensure >/dev/null 2>&1 || log "ERROR selfheal ensure failed"
   date '+%F %T IST' > "$HB"
   [ "$fixed" = 1 ] || [ "${VERBOSE:-0}" = 1 ] && log "pass done (fixed=$fixed)"
   return 0

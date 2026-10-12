@@ -20,7 +20,7 @@ LOG=$RUN_DIR/logs/client1-chrome.log
 W=1366; H=900
 mkdir -p "$DIR" "$(dirname "$LOG")"
 ts(){ date '+%F %T IST'; }
-cdp_ok(){ curl -s -m 3 "http://127.0.0.1:$PORT/json/version" 2>/dev/null | grep -q Browser; }
+cdp_ok(){ curl -s -m ${CDP_TIMEOUT:-10} "http://127.0.0.1:$PORT/json/version" 2>/dev/null | grep -q Browser; }
 pids(){ pgrep -u "$(id -un)" -f -- "--remote-debugging-port=$PORT" 2>/dev/null | while read -r p; do
   tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null | grep -qF -- "--user-data-dir=$DIR" && echo "$p"; done || true; }
 xvfb_ok(){ [ -S /tmp/.X11-unix/X$DNUM ] && pgrep -u "$(id -un)" -f "^Xvfb $DISP( |$)" >/dev/null; }
@@ -55,6 +55,14 @@ case "${1:-start}" in
     for i in $(seq 1 10); do sleep 1; [ -z "$(pids)" ] && break; done; echo "stopped $p" ;;
   start)
     if cdp_ok; then echo "already up: port=$PORT"; exit 0; fi
+    # v0.5 fix (2026-10-12): a slow CDP under load is NOT "down". If a Chrome for this profile is still alive, never
+    # delete its Singleton lock and never launch a second one (bwrap's own pid namespace hides the lock owner, so
+    # Chrome would happily start a duplicate on the same profile: 14 copies piled up this way).
+    alive=$(pids | tr '\n' ' ')
+    if [ -n "${alive// /}" ]; then
+      echo "[$(ts)] start skipped: chrome alive (pids $alive) but CDP slow/not answering; not launching a duplicate" >> "$LOG"
+      echo "WARN: client1 chrome alive (pids $alive) but CDP $PORT not answering; not launching a duplicate" >&2; exit 1
+    fi
     ensure_xvfb
     rm -f "$DIR"/Singleton* 2>/dev/null || true
     echo "[$(ts)] launch port=$PORT dir=$DIR display=$DISP sandbox=${CLIENT1_SANDBOX:-1}" >> "$LOG"
