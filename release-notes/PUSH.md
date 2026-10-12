@@ -16,8 +16,8 @@ git merge --no-ff docs -m "Merge branch 'docs': public README, docs, license, te
 git log --oneline -5
 
 # 2. Re-scan before pushing
-~/bin/gitleaks detect --source . --redact
-~/bin/gitleaks detect --source . --no-git --redact
+~/bin/gitleaks git . --redact
+~/bin/gitleaks dir . --redact
 
 # 3. Push
 git push origin main

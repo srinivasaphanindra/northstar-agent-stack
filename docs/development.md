@@ -24,7 +24,7 @@ python3 client1-state/tests/test_fix3.py
 
 ## Before you open a pull request
 ```bash
-gitleaks detect --source . --redact          # history
-gitleaks detect --source . --no-git --redact # working tree
+gitleaks git . --redact          # history
+gitleaks dir . --redact # working tree
 ```
 Keep IDs and contacts as placeholders, and keep screenshots on demo data.
