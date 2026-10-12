@@ -1,0 +1,6 @@
+# /etc/caddy/Caddyfile — automatic HTTPS for the app
+app.example.in {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3100
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}

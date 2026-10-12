@@ -1,0 +1,227 @@
+{
+  "id": "YB9lz9pnKolDfFiX",
+  "name": "Tool: Browser task (client1)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "When called by agent",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "task",
+              "type": "string"
+            },
+            {
+              "name": "max_steps",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a2",
+      "name": "Webhook (local)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-browser-task",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst j = $input.first().json || {}; const b = j.body || j;\nreturn [{ json: { task: String(b.task ?? ''), max_steps: Math.min(Number(b.max_steps ?? 25) || 25, 40) } }];\n"
+      }
+    },
+    {
+      "id": "a5",
+      "name": "Helper: browser gate (allow-list, monthly cap, budget, pause)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        400,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/guard/browser",
+        "options": {
+          "timeout": 8000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $json.task, source: 'agent' }) }}"
+      }
+    },
+    {
+      "id": "a6",
+      "name": "Allowed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a6c",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Browser agent (read-only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8770/task",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $('Normalize').first().json.task, max_steps: $('Normalize').first().json.max_steps, allow_write: false }) }}",
+        "options": {
+          "timeout": 660000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "a7",
+      "name": "Refused result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nreturn [{ json: { status: 'refused', result_text: 'NOT RUN: ' + String($json.message || 'the browser gate (client1-state) did not answer, so nothing was opened. Try again in a minute.'),\n  urls_visited: [], steps: 0, reason: $json.reason || 'gate_unavailable' } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "When called by agent": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (local)": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Helper: browser gate (allow-list, monthly cap, budget, pause)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: browser gate (allow-list, monthly cap, budget, pause)": {
+      "main": [
+        [
+          {
+            "node": "Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Browser agent (read-only)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refused result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Kolkata",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

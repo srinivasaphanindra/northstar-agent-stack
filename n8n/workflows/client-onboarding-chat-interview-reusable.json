@@ -1,0 +1,534 @@
+{
+  "id": "EWo4fdGhovm4OJFs",
+  "name": "Client onboarding: chat interview (reusable)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "o1",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "client",
+              "type": "string"
+            },
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "thread_ts",
+              "type": "string"
+            },
+            {
+              "name": "ts",
+              "type": "string"
+            },
+            {
+              "name": "user",
+              "type": "string"
+            },
+            {
+              "name": "text",
+              "type": "string"
+            },
+            {
+              "name": "mode",
+              "type": "string"
+            },
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "o2",
+      "name": "Step",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Onboarding state lives in THIS workflow's static data (sessions keyed channel:thread). Deterministic steps here;\n// the LLM is only used to understand a free-text answer (one cheap call per answer).\nconst Q = [{\"id\": \"q1\", \"title\": \"Business\", \"text\": \"What's the business called, and what do you sell?\"}, {\"id\": \"q2\", \"title\": \"Location and customers\", \"text\": \"Which city or area are you in, and who are your customers there?\"}, {\"id\": \"q3\", \"title\": \"90-day goals\", \"text\": \"What are your main goals for the next 90 days? (more leads, followers, a launch, anything)\"}, {\"id\": \"q4\", \"title\": \"Ideal customer / audience\", \"text\": \"Who is your ideal customer or audience, the people these posts should reach?\"}, {\"id\": \"q5\", \"title\": \"Brand voice\", \"text\": \"Give me 3 words for your brand voice, and paste (or describe) an example post you like.\"}, {\"id\": \"q6\", \"title\": \"Platforms and links\", \"text\": \"Which platforms do you use? Please share the links: website, X, LinkedIn, Facebook, Instagram, anything else.\"}, {\"id\": \"q7\", \"title\": \"Topics to post / avoid\", \"text\": \"What topics should we post about, and is there anything we should never post about?\"}, {\"id\": \"q8\", \"title\": \"Competitors / admired accounts\", \"text\": \"Any competitors or accounts you admire? Handles or links are perfect.\"}, {\"id\": \"q9\", \"title\": \"Approval preference\", \"text\": \"How do you want approvals: approve every post yourself, or let routine stuff (like scheduled tips) go out automatically?\"}, {\"id\": \"q10\", \"title\": \"Contact and working hours\", \"text\": \"Last one: best way to reach you, and your working hours?\"}];\nconst t = $('When called').first().json;\nconst st = $getWorkflowStaticData('global'); st.sessions = st.sessions || {};\nconst dry = t.dry_run === true || t.dry_run === 'true';\nconst thread = t.thread_ts || t.ts;\nconst key = (dry ? 'dry:' : '') + (t.channel || '') + ':' + thread;\nconst now = Date.now() / 1000;\nfor (const [k, v] of Object.entries(st.sessions)) if (now - (v.updated || 0) > 14 * 86400) delete st.sessions[k];\nconst mode = String(t.mode || 'answer'), text = String(t.text || '').trim();\nconst base = { key, dry, client: t.client || 'client1', channel: t.channel || 'C0000000001', thread_ts: thread, ts: t.ts || '', mode, text };\nconst fin = reply => [{ json: { ...base, final: true, needs_llm: false, reply } }];\nif (mode === 'reset') { for (const k of Object.keys(st.sessions)) if (k.startsWith('dry:')) delete st.sessions[k]; return fin('(dry-run sessions cleared)'); }\nlet s = st.sessions[key];\nif (mode === 'start') {\n  st.sessions[key] = { client: base.client, answers: {}, skipped: [], current: 'q1', status: 'active', started: now, updated: now };\n  return fin(`Hi! Let's set things up so I post and engage the way you like. About ${Q.length} quick questions, one at a time, right here in this thread. Say 'skip' to skip one, or 'stop onboarding' to stop.\\n\\n*1/${Q.length}* ${Q[0].text}`);\n}\nif (!s) return fin(\"I don't have an onboarding open in this thread. Say 'start onboarding' in the channel to begin.\");\nif (mode === 'cancel' || /^(stop|cancel) onboarding\\b/i.test(text)) { delete st.sessions[key]; return fin(\"Onboarding stopped. Answers given so far were not saved. Say 'start onboarding' to begin again.\"); }\ns.updated = now;\nconst nextQ = () => Q.find(q => !(q.id in s.answers) && !s.skipped.includes(q.id));\nconst qtext = id => (Q.find(q => q.id === id) || {}).text;\nif (s.status !== 'active') {\n  if (/^(no|nope|nothing|all good|looks good|lgtm|that'?s (it|all)|perfect|fine|ok(ay)?|done)\\b/i.test(text)) { s.status = 'closed'; return fin(\"Great, it's all in the client notes. I'll use it from now on. You can add more anytime with 'remember: ...'.\"); }\n  return [{ json: { ...base, final: false, needs_llm: true, phase: 'fix', prompt:\n    `An onboarding interview for a social media client is finished. Questions: ${JSON.stringify(Q.map(q => ({ id: q.id, q: q.text })))}\\nSaved answers: ${JSON.stringify(s.answers)}\\nThe client now writes:\\n<<<${text}>>>\\nIf this corrects or adds to any answer, return the FULL corrected answer text for those ids. Keep their own words, be concise, never invent.\\nReturn ONLY JSON: {\"updates\": {\"<id>\": \"<corrected answer>\"}} (empty updates if it is not a correction).` } }];\n}\nif (/^(skip|pass|next|n\\/a|not sure|later|no idea)\\b/i.test(text) && text.length < 30) {\n  s.skipped.push(s.current);\n  return [{ json: { ...base, final: false, needs_llm: false, phase: 'answer', skipped: true } }];\n}\nreturn [{ json: { ...base, final: false, needs_llm: true, phase: 'answer', prompt:\n  `You run a friendly onboarding interview (Slack thread) for a small-business social media client.\\nQuestions in order: ${JSON.stringify(Q.map(q => ({ id: q.id, q: q.text })))}\\nAnswers so far: ${JSON.stringify(s.answers)}\\nSkipped: ${JSON.stringify(s.skipped)}\\nCurrent question: ${s.current} (${qtext(s.current)})\\nThe client's reply:\\n<<<${text}>>>\\n` +\n  `Return ONLY JSON: {\"updates\": {\"<id>\": \"<concise faithful summary in their words>\"}, \"next_id\": \"<first question id in order still unanswered and not skipped after your updates, or empty if none>\", \"next_question\": \"<short warm acknowledgement of what they said (max 12 words) + that next question, adapted to what you already know; exactly one question>\"}.\\n` +\n  `Always include the current question in updates (if they did not really answer it, store what they said). Use details from earlier answers too (e.g. a city or customer type they already mentioned) instead of writing 'not specified'. Add other ids ONLY if this reply clearly answers them. Never invent facts, links or numbers. Plain friendly English, no emojis.` } }];\n"
+      }
+    },
+    {
+      "id": "o3",
+      "name": "Needs LLM?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "o3c",
+              "leftValue": "={{ $json.needs_llm }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "o4",
+      "name": "Understand answer (LLM)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "onError": "continueRegularOutput",
+      "position": [
+        660,
+        100
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      }
+    },
+    {
+      "id": "o5",
+      "name": "OpenRouter model (onboarding)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        660,
+        320
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "google/gemini-3.1-flash-lite"
+        },
+        "options": {
+          "temperature": 0.4,
+          "maxTokens": 700
+        }
+      }
+    },
+    {
+      "id": "o6",
+      "name": "Apply answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst Q = [{\"id\": \"q1\", \"title\": \"Business\", \"text\": \"What's the business called, and what do you sell?\"}, {\"id\": \"q2\", \"title\": \"Location and customers\", \"text\": \"Which city or area are you in, and who are your customers there?\"}, {\"id\": \"q3\", \"title\": \"90-day goals\", \"text\": \"What are your main goals for the next 90 days? (more leads, followers, a launch, anything)\"}, {\"id\": \"q4\", \"title\": \"Ideal customer / audience\", \"text\": \"Who is your ideal customer or audience, the people these posts should reach?\"}, {\"id\": \"q5\", \"title\": \"Brand voice\", \"text\": \"Give me 3 words for your brand voice, and paste (or describe) an example post you like.\"}, {\"id\": \"q6\", \"title\": \"Platforms and links\", \"text\": \"Which platforms do you use? Please share the links: website, X, LinkedIn, Facebook, Instagram, anything else.\"}, {\"id\": \"q7\", \"title\": \"Topics to post / avoid\", \"text\": \"What topics should we post about, and is there anything we should never post about?\"}, {\"id\": \"q8\", \"title\": \"Competitors / admired accounts\", \"text\": \"Any competitors or accounts you admire? Handles or links are perfect.\"}, {\"id\": \"q9\", \"title\": \"Approval preference\", \"text\": \"How do you want approvals: approve every post yourself, or let routine stuff (like scheduled tips) go out automatically?\"}, {\"id\": \"q10\", \"title\": \"Contact and working hours\", \"text\": \"Last one: best way to reach you, and your working hours?\"}];\nconst S = $('Step').first().json;\nif (S.final) return [{ json: { ...S, block: null } }];\nconst st = $getWorkflowStaticData('global'); const s = st.sessions[S.key];\nif (!s) return [{ json: { ...S, reply: 'Onboarding session not found.', block: null } }];\nlet obj = {};\nif (S.needs_llm) { const raw = String($json.text || ''); const m = raw.match(/\\{[\\s\\S]*\\}/); if (m) { try { obj = JSON.parse(m[0]); } catch (e) { obj = {}; } } }\nconst upd = (obj && typeof obj.updates === 'object' && obj.updates) || {};\nconst ids = Q.map(q => q.id);\nif (S.phase === 'answer' && !S.skipped && !Object.keys(upd).length) upd[s.current] = S.text;   // LLM failed -> keep the raw answer\nconst changed = [];\nfor (const [k, v] of Object.entries(upd)) if (ids.includes(k) && String(v || '').trim()) { s.answers[k] = String(v).trim().slice(0, 800); s.skipped = s.skipped.filter(x => x !== k); changed.push(k); }\nconst when = $now.setZone('Asia/Kolkata').toFormat('yyyy-MM-dd HH:mm');\nconst buildBlock = () => `## Onboarding answers (Slack interview, updated ${when} IST)\\n` + Q.map(q => `### ${q.title}\\n${s.answers[q.id] || '_(skipped)_'}`).join('\\n\\n');\nconst summary = () => Q.map(q => `• *${q.title}:* ${(s.answers[q.id] || '_skipped_').replace(/\\s+/g, ' ').slice(0, 140)}`).join('\\n');\nif (S.phase === 'fix') {\n  if (!changed.length) return [{ json: { ...S, reply: \"Got it. I didn't change anything in the notes. Tell me what to fix, or say 'looks good'.\", block: null } }];\n  return [{ json: { ...S, reply: `Updated in the client notes: ${changed.map(k => Q.find(q => q.id === k).title).join(', ')}.\\nAnything else to fix?`, block: buildBlock() } }];\n}\nconst n = Q.find(q => !(q.id in s.answers) && !s.skipped.includes(q.id));\nif (n) {\n  s.current = n.id;\n  const pos = Q.indexOf(n) + 1;\n  const ask = (obj.next_id === n.id && obj.next_question) ? String(obj.next_question).slice(0, 400) : (S.skipped ? 'No problem, skipped. ' : 'Thanks! ') + n.text;\n  return [{ json: { ...S, reply: `*${pos}/${Q.length}* ${ask}`, block: null } }];\n}\ns.status = 'done'; s.current = null;\nreturn [{ json: { ...S, block: buildBlock(), reply: `Thanks, that's everything! Here's what I saved to the client notes:\\n${summary()}\\n\\nAnything to fix? Reply here with corrections, or say 'looks good'.` } }];\n"
+      }
+    },
+    {
+      "id": "o7",
+      "name": "Helper: save notes block",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/notes/onboarding",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ client: $json.client, block: $json.block, dry_run: $json.dry }) }}"
+      }
+    },
+    {
+      "id": "o8",
+      "name": "Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst a = $('Apply answer').first().json, h = $json || {};\nconst slack = { channel: a.channel, thread_ts: a.thread_ts, text: String(a.reply || '').slice(0, 3900), unfurl_links: false, unfurl_media: false };\nif (a.block && h.ok === false) slack.text += '\\n:warning: (saving to notes.md failed: ' + String(h.error || '').slice(0, 120) + ')';\nreturn [{ json: { dry: a.dry, has_text: !!a.reply, slack, notes: h, block: a.block, state: ($getWorkflowStaticData('global').sessions || {})[a.key] || null,\n                  receipt: { channel: a.channel, ts: a.ts, ok: true, note: '', thread_ts: a.thread_ts } } }];\n"
+      }
+    },
+    {
+      "id": "o9",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "o9c",
+              "leftValue": "={{ $json.dry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "o10",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "o11",
+      "name": "Has text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.has_text);"
+      }
+    },
+    {
+      "id": "o12",
+      "name": "Slack: reply in thread",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1980,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "o13",
+      "name": "Receipt item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const r = $('Reply').first().json.receipt; if (!r.ts) return []; return [{ json: { ...r, ok: !!$json.ok, note: $json.ok ? '' : 'Sorry, my onboarding reply failed to post (' + ($json.error || 'Slack error') + ').' } }];"
+      }
+    },
+    {
+      "id": "o14",
+      "name": "Read receipt (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        100
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "qg4LM5nI80u7kvnV",
+          "mode": "id",
+          "cachedResultName": "Client bot: read receipt (reusable)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $json.channel }}",
+            "ts": "={{ $json.ts }}",
+            "ok": "={{ $json.ok }}",
+            "note": "={{ $json.note }}",
+            "thread_ts": "={{ $json.thread_ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ok",
+              "displayName": "ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Step": {
+      "main": [
+        [
+          {
+            "node": "Needs LLM?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs LLM?": {
+      "main": [
+        [
+          {
+            "node": "Understand answer (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apply answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Understand answer (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Apply answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply answer": {
+      "main": [
+        [
+          {
+            "node": "Helper: save notes block",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: save notes block": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reply": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has text": {
+      "main": [
+        [
+          {
+            "node": "Slack: reply in thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: reply in thread": {
+      "main": [
+        [
+          {
+            "node": "Receipt item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt item": {
+      "main": [
+        [
+          {
+            "node": "Read receipt (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter model (onboarding)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Understand answer (LLM)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

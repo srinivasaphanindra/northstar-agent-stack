@@ -1,0 +1,247 @@
+// Northstar Agents platform - one schema for SQLite (local) and Postgres (prod).
+// Rules that keep it portable: no enums, no native JSON columns (JSON is stored as text),
+// no provider-specific types. `npm run db:pg-schema` writes prisma/postgres/schema.prisma for prod.
+// Every tenant-owned row carries workspaceId.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String    @default("")
+  passwordHash    String
+  isPlatformAdmin Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  sessions        Session[]
+  members         Member[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ip        String   @default("")
+}
+
+model Workspace {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  city           String   @default("")
+  plan           String   @default("trial")         // trial | solo | pro
+  status         String   @default("pending_payment") // pending_payment | active | suspended
+  aiKeyMode      String   @default("platform")       // platform | byok
+  onboardingStep String   @default("plan")           // plan | interview | integrations | channel | done
+  dataKeyEnc     String                               // per-workspace data key, wrapped with APP_MASTER_KEY
+  paused         Boolean  @default(false)             // kill switch: no publishing, no agent actions
+  createdAt      DateTime @default(now())
+  members        Member[]
+}
+
+model Member {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String    // owner | admin | member
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  workspaceId String
+  email       String
+  role        String
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+// Encrypted credentials: OpenRouter key, Buffer, Hootsuite, GoHighLevel, generic API, Telegram, Slack.
+model Integration {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  provider     String    // openrouter | buffer | hootsuite | gohighlevel | generic | telegram | slack
+  secretEnc    String    @default("")  // AES-256-GCM with the workspace data key; never sent to the browser
+  last4        String    @default("")
+  config       String    @default("{}") // non-secret JSON (channel id, webhook url, approver ids...)
+  status       String    @default("saved") // saved | ok | error | disabled
+  lastTestAt   DateTime?
+  lastTestNote String    @default("")
+  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime  @default(now())
+
+  @@unique([workspaceId, provider])
+}
+
+model GuardrailSettings {
+  id          String   @id @default(cuid())
+  workspaceId String   @unique
+  overrides   String   @default("{}") // JSON merged over the yaml template (defaults -> tiers[plan] -> overrides)
+  updatedAt   DateTime @updatedAt
+}
+
+model BrainNote {
+  id          String   @id @default(cuid())
+  workspaceId String
+  section     String   // business | location | goals | audience | voice | platforms | topics | competitors | approvals | contact | remembered
+  content     String
+  source      String   @default("onboarding") // onboarding | chat | manual
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, section])
+}
+
+model OnboardingSession {
+  id          String   @id @default(cuid())
+  workspaceId String   @unique
+  step        Int      @default(0)
+  answers     String   @default("{}")
+  status      String   @default("active") // active | review | done
+  updatedAt   DateTime @updatedAt
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  channel     String    // web | telegram | slack
+  externalId  String    // web: random id; telegram: chat id; slack: channel:thread_ts
+  title       String    @default("")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  messages    Message[]
+
+  @@unique([workspaceId, channel, externalId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  workspaceId    String
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // user | assistant | tool
+  content        String
+  meta           String       @default("{}")
+  authorUserId   String?
+  createdAt      DateTime     @default(now())
+
+  @@index([workspaceId, conversationId, createdAt])
+}
+
+// Approval items. The agent can only create them; only a human with the right role can approve.
+model Draft {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  conversationId String?
+  text           String
+  platforms      String    @default("[]") // JSON list: x | linkedin | facebook | instagram
+  status         String    @default("pending") // pending | approved | rejected | published | failed | blocked
+  mode           String    @default("queue")   // queue | now | scheduled
+  scheduledAt    DateTime? // when mode = scheduled (Buffer customScheduled dueAt)
+  createdBy      String    @default("agent")
+  decidedBy      String?
+  decidedAt      DateTime?
+  guardNote      String    @default("")
+  publishResult  String    @default("")
+  bufferPostIds  String    @default("[]")
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([workspaceId, status])
+}
+
+model ChannelBinding {
+  id          String   @id @default(cuid())
+  workspaceId String
+  channel     String   // telegram | slack | web
+  externalId  String   @default("") // telegram chat id / slack channel id
+  linkCode    String   @default("")
+  boundUserId String?
+  status      String   @default("pending") // pending | active | disabled
+  cursor      String   @default("")        // telegram update offset / slack last ts
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, channel])
+}
+
+// Poll-based job queue (works the same on SQLite and Postgres).
+model Job {
+  id          String    @id @default(cuid())
+  workspaceId String?
+  type        String
+  payload     String    @default("{}")
+  status      String    @default("queued") // queued | running | done | failed
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  runAfter    DateTime  @default(now())
+  lockedAt    DateTime?
+  lockedBy    String?
+  error       String    @default("")
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([status, runAfter])
+}
+
+model UsageEvent {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  kind         String   // llm | message | publish
+  model        String   @default("")
+  keyMode      String   @default("platform")
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+model Invoice {
+  id          String    @id @default(cuid())
+  workspaceId String
+  plan        String
+  amountInr   Int
+  status      String    @default("pending") // pending | paid | void
+  method      String    @default("")        // upi | gumroad | other
+  reference   String    @default("")        // UPI ref / Gumroad sale id, typed by the admin
+  paidAt      DateTime?
+  markedBy    String?
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+// Append-only. The app never updates or deletes rows here.
+model AuditLog {
+  id          String   @id @default(cuid())
+  workspaceId String?
+  actorUserId String?
+  actorType   String   // user | agent | system | admin
+  action      String
+  target      String   @default("")
+  detail      String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}

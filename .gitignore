@@ -1,0 +1,49 @@
+# --- secrets (only *.example files are committed) ---
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+owner.env
+ngrok.yml
+*.pem
+*.key
+*.p12
+id_rsa*
+credentials*.json
+
+# --- runtime data (logs, state, sqlite, chrome profiles, backups) ---
+.run/
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.log
+*.pid
+*.tsv
+*.bak
+*.bak-*
+backups/
+chrome-profile/
+clients/*/notes.md
+clients/*/upsell-log.md
+
+# --- dependencies / build output ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.venv/
+__pycache__/
+*.pyc
+prisma/postgres/
+app/docs/screens/
+
+# --- editor / OS ---
+.DS_Store
+.idea/
+.vscode/

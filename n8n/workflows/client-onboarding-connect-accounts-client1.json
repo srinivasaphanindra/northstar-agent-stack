@@ -1,0 +1,256 @@
+{
+  "id": "Fa6P7r948OGSoicO",
+  "name": "Client onboarding: connect accounts (client1)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "Manual run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a2",
+      "name": "Webhook (local)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-onboarding-connect",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Client config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        100
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "client_slug",
+              "value": "client1",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "client_first_name",
+              "value": "the owner",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "agency_name",
+              "value": "Northstar Agents",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "slack_channel",
+              "value": "={{ ($json.body && $json.body.slack_channel) || '#client1-profile' }}",
+              "type": "string"
+            },
+            {
+              "id": "c5",
+              "name": "platforms",
+              "value": "LinkedIn (profile), X (@your_x_handle) and Facebook (Page only: Buffer cannot post to personal profiles)",
+              "type": "string"
+            },
+            {
+              "id": "c6",
+              "name": "buffer_signup_url",
+              "value": "https://buffer.com/signup",
+              "type": "string"
+            },
+            {
+              "id": "c7",
+              "name": "buffer_app_url",
+              "value": "https://publish.buffer.com",
+              "type": "string"
+            },
+            {
+              "id": "c8",
+              "name": "buffer_help_url",
+              "value": "https://support.buffer.com/article/564-connecting-your-channels-to-buffer",
+              "type": "string"
+            },
+            {
+              "id": "c9",
+              "name": "buffer_client_id",
+              "value": "={{ ($json.body && $json.body.buffer_client_id) || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "c10",
+              "name": "buffer_redirect_uri",
+              "value": "https://your-github-user.github.io/northstar-agents/buffer-callback.html",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a4",
+      "name": "PKCE verifier",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        480,
+        100
+      ],
+      "parameters": {
+        "action": "generate",
+        "dataPropertyName": "code_verifier",
+        "encodingType": "hex",
+        "stringLength": 64
+      }
+    },
+    {
+      "id": "a5",
+      "name": "PKCE challenge",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        700,
+        100
+      ],
+      "parameters": {
+        "action": "hash",
+        "type": "SHA256",
+        "value": "={{ $json.code_verifier }}",
+        "dataPropertyName": "code_challenge_b64",
+        "encoding": "base64"
+      }
+    },
+    {
+      "id": "a6",
+      "name": "Compose Slack message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Compose the \"Connect your accounts\" Slack message for one client.\n// Steps 1-2 happen on Buffer's and each platform's own pages (client approves there; we never see passwords).\n// Step 3 (optional, when buffer_client_id is set): OAuth 2.0 + PKCE link to our Buffer app client.\nconst c = $('Client config').first().json;\nconst verifier = $('PKCE verifier').first().json.code_verifier;\nconst b64 = $json.code_challenge_b64 || '';\nconst challenge = b64.replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');\nconst state = verifier.slice(0, 32);   // random (hex) one-time value, checked when the code comes back\nlet oauthUrl = '';\nif (c.buffer_client_id) {\n  const params = {\n    client_id: c.buffer_client_id, redirect_uri: c.buffer_redirect_uri, response_type: 'code',\n    scope: 'posts:write posts:read account:read offline_access', state,\n    code_challenge: challenge, code_challenge_method: 'S256', prompt: 'consent' };\n  oauthUrl = 'https://auth.buffer.com/auth?' + Object.entries(params)\n    .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');\n  // keep the verifier for the code exchange (persists for production/webhook runs, not manual test runs)\n  const sd = $getWorkflowStaticData('global');\n  sd.pkce = sd.pkce || {};\n  sd.pkce[state] = { client: c.client_slug, verifier, created: new Date().toISOString() };\n}\nconst steps = [\n  `*1. Create your free Buffer account* (2 min, no card): <${c.buffer_signup_url}|buffer.com/signup>. Use your own email; you own this account.`,\n  `*2. Connect your accounts*: open <${c.buffer_app_url}|Buffer>, click *+ New → Connect a New Channel*, pick ${c.platforms}. ` +\n    `Each one opens the platform's own sign-in/approval page. Approve there; we never see your password. ` +\n    `Tip: sign in to the right profile in another tab first. (<${c.buffer_help_url}|Buffer's guide>)`,\n];\nif (oauthUrl) steps.push(`*3. Give ${c.agency_name} posting access*: <${oauthUrl}|Approve ${c.agency_name} on Buffer>. ` +\n    `Buffer shows exactly what we can do (create and read posts). You can revoke it any time in Buffer → Settings → Connected apps. ` +\n    `After approving, paste the code from the page you land on here in this channel.`);\nelse steps.push(`*3. Tell us when done*: reply *done* here. We'll check the channels and set up a one-time secure access key with you.`);\nconst text = `Hi ${c.client_first_name}! Let's connect your social accounts so ${c.agency_name} can post for you (only posts you approve).`;\nconst blocks = [\n  { type: 'section', text: { type: 'mrkdwn', text: text } },\n  ...steps.map(s => ({ type: 'section', text: { type: 'mrkdwn', text: s } })),\n  { type: 'context', elements: [{ type: 'mrkdwn', text: `Never share passwords or codes from your phone in this chat. Questions? Just reply here.` }] },\n];\nreturn [{ json: { client: c.client_slug, channel: c.slack_channel, text, blocks, oauth_url: oauthUrl || null,\n  oauth_state: oauthUrl ? state : null, preview: [text, ...steps].join('\\n\\n') } }];\n"
+      }
+    },
+    {
+      "id": "a7",
+      "name": "Post to Slack (disabled until token + channel exist)",
+      "disabled": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: $json.channel, text: $json.text, blocks: $json.blocks, unfurl_links: false }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual run": {
+      "main": [
+        [
+          {
+            "node": "Client config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (local)": {
+      "main": [
+        [
+          {
+            "node": "Client config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client config": {
+      "main": [
+        [
+          {
+            "node": "PKCE verifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PKCE verifier": {
+      "main": [
+        [
+          {
+            "node": "PKCE challenge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PKCE challenge": {
+      "main": [
+        [
+          {
+            "node": "Compose Slack message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Slack message": {
+      "main": [
+        [
+          {
+            "node": "Post to Slack (disabled until token + channel exist)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Kolkata",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

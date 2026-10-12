@@ -1,0 +1,381 @@
+{
+  "id": "GNeJLCKN53xXlgA4",
+  "name": "Tool: Buffer post (client1)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "b1",
+      "name": "When called by agent",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "text",
+              "type": "string"
+            },
+            {
+              "name": "service",
+              "type": "string"
+            },
+            {
+              "name": "mode",
+              "type": "string"
+            },
+            {
+              "name": "approved",
+              "type": "boolean"
+            },
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            },
+            {
+              "name": "media_url",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b2",
+      "name": "Manual run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b3",
+      "name": "Sample input (dry run)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        220
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "text",
+              "value": "Test draft from Northstar n8n (dry run, never sent)",
+              "type": "string"
+            },
+            {
+              "id": "s2",
+              "name": "service",
+              "value": "linkedin",
+              "type": "string"
+            },
+            {
+              "id": "s3",
+              "name": "mode",
+              "value": "draft",
+              "type": "string"
+            },
+            {
+              "id": "s4",
+              "name": "approved",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "s5",
+              "name": "dry_run",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b4",
+      "name": "Validate + build",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Validate the request and build the Buffer GraphQL payloads. SAFE DEFAULTS: dry_run=true, mode=draft.\n// Publishing (mode queue/now) requires approved === true (set only after the client approved the post in Slack).\nconst i = $json;\nconst text = String(i.text || '').trim();\nconst service = String(i.service || '').toLowerCase().replace(/^x$/, 'twitter');\nconst mode = String(i.mode || 'draft').toLowerCase();\nconst dry = !(i.dry_run === false || i.dry_run === 'false');\nconst LIMITS = { twitter: 280, linkedin: 3000, facebook: 63206 };\nif (!text) throw new Error('text is required');\nif (!LIMITS[service]) throw new Error('service must be linkedin | twitter (x) | facebook');\nif (text.length > LIMITS[service]) throw new Error(`text is ${text.length} chars; ${service} limit is ${LIMITS[service]}`);\nif (!['draft', 'queue', 'now'].includes(mode)) throw new Error('mode must be draft | queue | now');\nif (mode !== 'draft' && !(i.approved === true || i.approved === 'true'))\n  throw new Error(`REFUSED: mode=${mode} publishes publicly and needs approved=true (client approval in Slack)`);\nconst input = { text, channelId: '__CHANNEL_ID__', schedulingType: 'automatic',\n  mode: mode === 'now' ? 'shareNow' : 'addToQueue', saveToDraft: mode === 'draft', aiAssisted: true, source: 'northstar-n8n' };\nif (i.media_url) input.assets = [{ image: { url: String(i.media_url) } }];\nconst createPost = {\n  query: `mutation CreatePost($input: CreatePostInput!) { createPost(input: $input) {\n    ... on PostActionSuccess { post { id status dueAt text } }\n    ... on MutationError { message } } }`,\n  variables: { input } };\nreturn [{ json: { service, mode, dry_run: dry, text_chars: text.length, createPost } }];\n"
+      }
+    },
+    {
+      "id": "b5",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{ $json.dry_run }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b6",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nreturn [{ json: { ok: true, dry_run: true, note: 'Nothing sent to Buffer. Pass dry_run=false (and approved=true for queue/now) to post.', request: $json } }];\n"
+      }
+    },
+    {
+      "id": "b7",
+      "name": "Buffer: organization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"query { account { organizations { id name } } }\" }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "b8",
+      "name": "Buffer: channels",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: \"query($o: OrganizationId!) { channels(input: { organizationId: $o }) { id service name displayName isDisconnected isLocked } }\", variables: { o: $json.data.account.organizations[0].id } }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "b9",
+      "name": "Pick channel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst req = $('Validate + build').first().json;\nconst chans = ($json.data && $json.data.channels) || [];\nconst ch = chans.find(c => c.service === req.service && !c.isDisconnected && !c.isLocked);\nif (!ch) throw new Error(`No usable ${req.service} channel in Buffer (found: ${chans.map(c => c.service + ':' + c.name + (c.isDisconnected ? '(disconnected)' : '')).join(', ') || 'none'})`);\nconst body = JSON.parse(JSON.stringify(req.createPost));\nbody.variables.input.channelId = ch.id;\nreturn [{ json: { channel: { id: ch.id, name: ch.name, service: ch.service }, body } }];\n"
+      }
+    },
+    {
+      "id": "b10",
+      "name": "Buffer: createPost",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 30000
+        }
+      }
+    },
+    {
+      "id": "b11",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst r = $json.data && $json.data.createPost;\nconst ch = $('Pick channel').first().json.channel;\nif (!r || r.message) throw new Error('Buffer createPost failed: ' + (r ? r.message : JSON.stringify($json.errors || $json)));\nreturn [{ json: { ok: true, channel: ch, post: r.post } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "When called by agent": {
+      "main": [
+        [
+          {
+            "node": "Validate + build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual run": {
+      "main": [
+        [
+          {
+            "node": "Sample input (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample input (dry run)": {
+      "main": [
+        [
+          {
+            "node": "Validate + build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate + build": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buffer: organization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: organization": {
+      "main": [
+        [
+          {
+            "node": "Buffer: channels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: channels": {
+      "main": [
+        [
+          {
+            "node": "Pick channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick channel": {
+      "main": [
+        [
+          {
+            "node": "Buffer: createPost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: createPost": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Kolkata",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

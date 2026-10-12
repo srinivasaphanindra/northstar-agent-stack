@@ -1,0 +1,84 @@
+# Northstar client bot: guardrails template (copy to ~/agency/clients/<slug>/guardrails.yaml and edit).
+# Approved by the owner 2026-10-11. Read by the client helper service (client1-state) on every request
+# (reloaded when the file changes), so edits take effect without a restart.
+#
+# How values are resolved (deep merge, later wins):  defaults  ->  tiers[<plan>]  ->  overrides
+# plan: trial uses the defaults as they are. starter / growth apply the tier blocks below.
+# Keep to simple YAML: nested maps, "- item" lists, [a, b] lists, {k: v} maps, numbers, true/false, "strings".
+#
+# Golden behaviour: when a request crosses a limit the bot explains why in plain words and offers a safe
+# alternative. It never just says no.
+
+version: 1
+client: "<slug>"
+plan: trial
+
+defaults:
+  platforms:                     # per IST day; engagement = replies, likes, reposts that the bot performs
+    x:
+      engage_per_day: 5
+      posts_per_day: 3
+    linkedin:
+      engage_per_day: 3
+      posts_per_day: 2
+    facebook:
+      engage_per_day: 5
+      posts_per_day: 3
+
+  engagement:
+    allowed_actions: [reply, like, repost]
+    never: [follow, unfollow, dm, mass_like, identical_comment, hashtag_spam]
+    min_gap_minutes: 7           # plus a random 0-8 min
+    duplicate_similarity: 0.85   # a reply this close to an earlier one counts as copy-paste
+    duplicate_lookback_days: 30
+    pause_on_warning: true       # any warning / captcha / lock pauses engagement (already built)
+
+  content:
+    regex_check: true            # free, runs on every proposed and every about-to-publish text
+    llm_check: true              # cheap classifier, runs ONLY on text about to be published
+    check_model: google/gemini-3.1-flash-lite
+    fail_closed: true            # if the classifier can't run, nothing is published
+    max_hashtags: 2
+    allow_politics: false        # client opt-in only
+    allow_religion: false        # client opt-in only
+    numbers_must_be_in_notes: true
+
+  approvals:
+    approvers: [U0000000001]     # Slack users whose ✅ counts
+    auto_post_routine: false     # client opt-in: routine posts may skip ✅ (not built as a path yet)
+    always_need_approval: [reply, comment, dm, sensitive]
+
+  spend:
+    monthly_ai_budget_usd: 10
+    browser_tasks_per_month: 60
+    warn_pct: 80                 # in-channel warning
+    pause_nonessential_pct: 100  # engagement ideas + research browsing stop; chat and safety checks continue
+    hard_stop_pct: 150           # even chat answers with a fixed "budget used up" message
+    est_usd_per_m_input: 0.25    # used only when OpenRouter returns no cost
+    est_usd_per_m_output: 1.50
+
+  access:
+    browser_domains: [x.com, twitter.com, linkedin.com, facebook.com, buffer.com]
+    client_website: ""           # e.g. "example.com"; added to the browser allow-list
+    slack_can_delete_user_messages: false   # bot token has no scope to delete other people's messages
+
+  scope:
+    in_scope: "social media and online presence"
+    notify_owner: true
+    upsell_log: "~/agency/clients/<slug>/upsell-log.md"
+
+  audit:
+    log: "~/agency/clients/<slug>/audit-log.tsv"
+    resume_all_by: [U0000000001]
+
+tiers:
+  starter:                       # Starter Rs 4,999, 1 platform: defaults are sized for it
+    spend:
+      monthly_ai_budget_usd: 10
+      browser_tasks_per_month: 60
+  growth:                        # Growth Rs 14,999, 2 platforms. [DECIDE] suggested numbers, not approved yet
+    spend:
+      monthly_ai_budget_usd: 20
+      browser_tasks_per_month: 120
+
+overrides: {}

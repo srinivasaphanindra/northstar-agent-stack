@@ -1,0 +1,18 @@
+[Unit]
+Description=Northstar app (worker: agent jobs + Telegram/Slack pollers)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=northstar
+WorkingDirectory=/opt/northstar-app
+EnvironmentFile=/opt/northstar-app/.env
+ExecStart=/usr/bin/node node_modules/tsx/dist/cli.mjs worker/index.ts
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

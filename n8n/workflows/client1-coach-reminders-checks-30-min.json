@@ -1,0 +1,319 @@
+{
+  "id": "FXYkTqcnVGaRVLIb",
+  "name": "Client1 coach: reminders + checks (30 min)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "t1",
+      "name": "Every 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "t2",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            },
+            {
+              "name": "force_plan",
+              "type": "string"
+            },
+            {
+              "name": "now",
+              "type": "number"
+            },
+            {
+              "name": "with_check",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "t3",
+      "name": "Start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst j = $input.first().json || {};\nconst b = j.body || j;\nconst dry = b.dry_run === true || b.dry_run === 'true';\nconst body = { dry_run: dry, force_plan: dry ? (b.force_plan || '') : '', no_check: dry ? !(b.with_check === true || b.with_check === 'true') : false };\nif (dry && b.now) body.now = Number(b.now);\nreturn [{ json: { body, dry_run: dry } }];\n"
+      }
+    },
+    {
+      "id": "t4",
+      "name": "Helper: coach tick",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        400,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/coach/tick",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "t5",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// nudges/celebrations were queued in the helper outbox (the poller posts them); here only the optional read-only check runs\nconst r = $json || {}, st = $('Start').first().json;\nif (st.dry_run) return [{ json: { dry_run: true, result: r } }];\nif (!r.check) return [];\nreturn [{ json: { check: r.check, task: r.check.task } }];\n"
+      }
+    },
+    {
+      "id": "t6",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "t6c",
+              "leftValue": "={{ $json.dry_run === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "t7",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "t8",
+      "name": "Browser: read-only check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1000,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8770/task",
+        "options": {
+          "timeout": 660000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $json.task, max_steps: 10, allow_write: false }) }}"
+      }
+    },
+    {
+      "id": "t9",
+      "name": "Verified body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst r = $json || {}, g = $('Gate').first().json.check || {};\nreturn [{ json: { body: { type: g.type, task_id: g.task_id || null, platform: g.platform || 'x', status: r.status || 'error',\n  result_text: String(r.result_text || (r.error && (r.error.message || r.error)) || '').slice(0, 2000) } } }];\n"
+      }
+    },
+    {
+      "id": "t10",
+      "name": "Helper: record check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1400,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/coach/verified",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Every 30 min": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Helper: coach tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: coach tick": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Browser: read-only check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Browser: read-only check": {
+      "main": [
+        [
+          {
+            "node": "Verified body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verified body": {
+      "main": [
+        [
+          {
+            "node": "Helper: record check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

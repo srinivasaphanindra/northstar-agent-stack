@@ -1,0 +1,625 @@
+{
+  "id": "FBNBcOKeRVx0gMHw",
+  "name": "Tool: Propose post (client1)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "q1",
+      "name": "When called by agent",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "text",
+              "type": "string"
+            },
+            {
+              "name": "services",
+              "type": "string"
+            },
+            {
+              "name": "when",
+              "type": "string"
+            },
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "thread_ts",
+              "type": "string"
+            },
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            },
+            {
+              "name": "label",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "q15",
+      "name": "Helper: content precheck",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        100,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/guard/content",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ text: String($json.text || ''), kind: 'post', by: 'agent', dry_run: $json.dry_run === true || $json.dry_run === 'true' }) }}"
+      }
+    },
+    {
+      "id": "q16",
+      "name": "Precheck ok?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        300,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "q16c",
+              "leftValue": "={{ $json.ok !== false }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "q17",
+      "name": "Tool result (blocked)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        560
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst g = $json;\nreturn [{ json: { ok: false, blocked: true, message: g.message, problems: g.blocks,\n  note: 'NOT drafted: the pre-check flagged this text. Explain the reason to the owner in plain friendly words and offer the safe alternative from the message (or a rewritten version). Do not retry the same text.' } }];\n"
+      }
+    },
+    {
+      "id": "q2",
+      "name": "Split per service",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst t = $('When called by agent').first().json;\nconst text = String(t.text || '').trim();\nif (!text) throw new Error('text is required');\nconst map = { x: 'x', twitter: 'x', linkedin: 'linkedin', li: 'linkedin', facebook: 'facebook', fb: 'facebook' };\nconst services = [...new Set(String(t.services || 'x').toLowerCase().split(/[\\s,;+&]+|and/).map(s => map[s.trim()]).filter(Boolean))];\nif (!services.length) throw new Error('services must list x, linkedin and/or facebook');\nreturn services.map(service => ({ json: { text, service, dry_run: t.dry_run === true || t.dry_run === 'true' } }));\n"
+      }
+    },
+    {
+      "id": "q3",
+      "name": "Buffer: save draft",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        400,
+        200
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "GNeJLCKN53xXlgA4",
+          "mode": "id",
+          "cachedResultName": "Tool: Buffer post (client1)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ $json.text }}",
+            "service": "={{ $json.service }}",
+            "mode": "draft",
+            "approved": false,
+            "dry_run": "={{ $json.dry_run }}",
+            "media_url": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "service",
+              "displayName": "service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "approved",
+              "displayName": "approved",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "media_url",
+              "displayName": "media_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "q4",
+      "name": "Collect drafts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst t = $('When called by agent').first().json;\nconst reqs = $('Split per service').all().map(i => i.json);\nconst NAMES = { x: 'X @your_x_handle', linkedin: 'LinkedIn your-linkedin-handle', facebook: 'Facebook Page YourBrand' };\nconst res = $input.all().map((it, i) => {\n  const j = it.json, svc = reqs[i].service;\n  if (j.dry_run) return { service: svc, ok: true, dry: true };\n  if (j.ok && j.post && j.post.id) return { service: svc, ok: true, post_id: j.post.id, channel_id: j.channel && j.channel.id };\n  return { service: svc, ok: false, error: String((j.error && (j.error.message || j.error)) || JSON.stringify(j)).slice(0, 200) };\n});\nconst drafts = res.filter(r => r.ok && r.post_id).map(r => ({ service: r.service === 'x' ? 'twitter' : r.service, post_id: r.post_id, channel_id: r.channel_id }));\nconst failed = res.filter(r => !r.ok);\nconst when = String(t.when || 'queue').toLowerCase() === 'now' ? 'now' : 'queue';\nconst dry = t.dry_run === true || t.dry_run === 'true';\nconst quote = String(t.text).split('\\n').map(l => '> ' + l).join('\\n');\nconst okNames = res.filter(r => r.ok).map(r => NAMES[r.service]).join(' + ');\nconst text = `*${t.label ? String(t.label).slice(0, 60) + ' · post preview' : 'Post preview'}* for ${okNames} (${when === 'now' ? 'share NOW on ✅' : 'add to Buffer queue on ✅'})\\n${quote}\\n`\n  + `Buffer draft id(s): ${drafts.map(d => `${d.service === 'twitter' ? 'X' : d.service} \\`${d.post_id}\\``).join(', ') || '(dry run)'}`\n  + (failed.length ? `\\nNot drafted: ${failed.map(f => f.service + ' (' + f.error + ')').join('; ')}` : '')\n  + `\\nReact ✅ publish · ✏️ edit · ❌ discard (deletes the draft). Or reply 'approve' / 'post it' / 'post it now'.`;\nreturn [{ json: { dry, when, drafts, failed, preview_ok: !dry && drafts.length > 0,\n  slack: { channel: t.channel || 'C0000000001', thread_ts: t.thread_ts || undefined, text, unfurl_links: false, unfurl_media: false } } }];\n"
+      }
+    },
+    {
+      "id": "q5",
+      "name": "Preview?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "q5c",
+              "leftValue": "={{ $json.preview_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "q6",
+      "name": "Tool result (dry run / failed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        360
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst c = $json;\nreturn [{ json: { ok: c.drafts.length > 0 || c.dry, dry_run: c.dry, would_post_preview: c.slack, drafts: c.drafts, failed: c.failed,\n  note: c.dry ? 'DRY RUN: no Buffer draft and no Slack preview were created.' : 'No draft could be created; nothing was posted.' } }];\n"
+      }
+    },
+    {
+      "id": "q7",
+      "name": "Slack: preview",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1000,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "q8",
+      "name": "Reaction buttons",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst c = $('Collect drafts').first().json;\nif (!$json.ok) throw new Error('Slack preview failed: ' + ($json.error || 'unknown'));\nreturn ['white_check_mark', 'pencil2', 'x'].map(name => ({ json: { body: { channel: $json.channel, timestamp: $json.ts, name }, preview_ts: $json.ts } }));\n"
+      }
+    },
+    {
+      "id": "q9",
+      "name": "Slack: add reactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1400,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/reactions.add",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "q10",
+      "name": "Register body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst c = $('Collect drafts').first().json, t = $('When called by agent').first().json;\nconst ts = $('Slack: preview').first().json.ts;\nreturn [{ json: { body: { slack_ts: ts, kind: 'post', channel: t.channel || 'C0000000001', thread_ts: t.thread_ts || ts,\n  payload: { text: t.text, when: c.when, drafts: c.drafts } } } }];\n"
+      }
+    },
+    {
+      "id": "q11",
+      "name": "Helper: register proposal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1800,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/proposals",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "q12",
+      "name": "Replaced drafts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Old drafts replaced after an ✏️ edit are deleted in Buffer (or a harmless read if none).\nconst rep = ($json.replaced || []).flatMap(r => r.drafts || []);\nif (!rep.length) return [{ json: { body: { query: '{ account { id } }' } } }];\nreturn rep.map(d => ({ json: { body: { query: 'mutation D($input: DeletePostInput!) { deletePost(input: $input) { ... on DeletePostSuccess { id } ... on VoidMutationError { message } } }', variables: { input: { id: d.post_id } } } } }));\n"
+      }
+    },
+    {
+      "id": "q13",
+      "name": "Buffer: delete replaced",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      }
+    },
+    {
+      "id": "q14",
+      "name": "Tool result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst c = $('Collect drafts').first().json;\nconst ts = $('Slack: preview').first().json.ts;\nconst rep = ($('Helper: register proposal').first().json.replaced || []).flatMap(r => r.drafts || []);\nreturn [{ json: { ok: true, preview_posted: true, preview_ts: ts, drafts: c.drafts, failed: c.failed, when: c.when,\n  replaced_drafts_deleted: rep.map(d => d.post_id),\n  note: 'Preview with draft ids is in the thread. Waiting for the owner: ✅ publish, ✏️ edit, ❌ discard. Do not repeat the text.' } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "When called by agent": {
+      "main": [
+        [
+          {
+            "node": "Helper: content precheck",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: content precheck": {
+      "main": [
+        [
+          {
+            "node": "Precheck ok?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Precheck ok?": {
+      "main": [
+        [
+          {
+            "node": "Split per service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tool result (blocked)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split per service": {
+      "main": [
+        [
+          {
+            "node": "Buffer: save draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: save draft": {
+      "main": [
+        [
+          {
+            "node": "Collect drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect drafts": {
+      "main": [
+        [
+          {
+            "node": "Preview?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preview?": {
+      "main": [
+        [
+          {
+            "node": "Slack: preview",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tool result (dry run / failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: preview": {
+      "main": [
+        [
+          {
+            "node": "Reaction buttons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reaction buttons": {
+      "main": [
+        [
+          {
+            "node": "Slack: add reactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: add reactions": {
+      "main": [
+        [
+          {
+            "node": "Register body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register body": {
+      "main": [
+        [
+          {
+            "node": "Helper: register proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: register proposal": {
+      "main": [
+        [
+          {
+            "node": "Replaced drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replaced drafts": {
+      "main": [
+        [
+          {
+            "node": "Buffer: delete replaced",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: delete replaced": {
+      "main": [
+        [
+          {
+            "node": "Tool result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

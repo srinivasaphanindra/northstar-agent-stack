@@ -1,0 +1,118 @@
+{
+  "id": "qg4LM5nI80u7kvnV",
+  "name": "Client bot: read receipt (reusable)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "r1",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "ts",
+              "type": "string"
+            },
+            {
+              "name": "ok",
+              "type": "boolean"
+            },
+            {
+              "name": "note",
+              "type": "string"
+            },
+            {
+              "name": "thread_ts",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "r2",
+      "name": "Build Slack calls",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst t = $('When called').first().json;\nif (!t.channel || !t.ts) return [];\nconst ok = t.ok === true || t.ok === 'true';\nconst items = [\n  { url: 'https://slack.com/api/reactions.remove', body: { channel: t.channel, timestamp: t.ts, name: 'eyes' } },\n  { url: 'https://slack.com/api/reactions.add', body: { channel: t.channel, timestamp: t.ts, name: ok ? 'white_check_mark' : 'warning' } },\n];\nif (!ok && t.note) items.push({ url: 'https://slack.com/api/chat.postMessage', body: { channel: t.channel, thread_ts: t.thread_ts || t.ts, text: ':warning: ' + String(t.note).slice(0, 500) } });\nreturn items.map(j => ({ json: j }));\n"
+      }
+    },
+    {
+      "id": "r3",
+      "name": "Slack: reactions / note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 15000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 300
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    }
+  ],
+  "connections": {
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Build Slack calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Slack calls": {
+      "main": [
+        [
+          {
+            "node": "Slack: reactions / note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

@@ -1,0 +1,19 @@
+[Unit]
+Description=Northstar app (web)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=northstar
+WorkingDirectory=/opt/northstar-app
+EnvironmentFile=/opt/northstar-app/.env
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,963 @@
+{
+  "id": "VcJuvRMlRZEqqPC3",
+  "name": "Client1 bot: dry-run harness",
+  "active": false,
+  "nodes": [
+    {
+      "id": "x1",
+      "name": "POST /client1-dryrun-actions",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-actions",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "x2",
+      "name": "Actions (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "FbTdLU9H465W10Yd",
+          "mode": "id",
+          "cachedResultName": "Client1 bot: actions (approvals, commands, notify)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "payload": "={{ typeof $json.body.payload === 'string' ? $json.body.payload : JSON.stringify($json.body.payload) }}",
+            "dry_run": true
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "x3",
+      "name": "POST /client1-dryrun-handler",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-handler",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "x4",
+      "name": "Handler (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        200
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "FFKpguli7WZX9cuz",
+          "mode": "id",
+          "cachedResultName": "Client1 bot"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "C0000000001",
+            "ts": "={{ $json.body.ts }}",
+            "thread_ts": "={{ $json.body.thread_ts || $json.body.ts }}",
+            "user": "={{ $json.body.user || 'U0000000001' }}",
+            "text": "={{ $json.body.text }}",
+            "dry_run": true,
+            "announce": "",
+            "context": "={{ $json.body.context || '' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "user",
+              "displayName": "user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "announce",
+              "displayName": "announce",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "context",
+              "displayName": "context",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "x5",
+      "name": "POST /client1-dryrun-propose",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-propose",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "x6",
+      "name": "Propose post (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        400
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "FBNBcOKeRVx0gMHw",
+          "mode": "id",
+          "cachedResultName": "Tool: Propose post (client1)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ $json.body.text }}",
+            "services": "={{ $json.body.services }}",
+            "when": "={{ $json.body.when || 'queue' }}",
+            "channel": "C0000000001",
+            "thread_ts": "={{ $json.body.thread_ts || '' }}",
+            "dry_run": true
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "services",
+              "displayName": "services",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "when",
+              "displayName": "when",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "label",
+              "displayName": "label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "x7",
+      "name": "POST /client1-dryrun-engage",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-engage",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "x8",
+      "name": "Engagement drafter (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        600
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "once",
+        "workflowId": {
+          "__rl": true,
+          "value": "lP4iZYQA5jvtNaiD",
+          "mode": "id",
+          "cachedResultName": "Client1 engage: drafter (X, 2x/day)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dry_run": true
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "x9",
+      "name": "POST /client1-dryrun-onboard",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        800
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-onboard",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "x10",
+      "name": "Onboarding (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        800
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "EWo4fdGhovm4OJFs",
+          "mode": "id",
+          "cachedResultName": "Client onboarding: chat interview (reusable)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "client": "client1",
+            "channel": "C0000000001",
+            "thread_ts": "={{ $json.body.thread_ts }}",
+            "ts": "={{ $json.body.ts || '' }}",
+            "user": "U0000000001",
+            "text": "={{ $json.body.text || '' }}",
+            "mode": "={{ $json.body.mode || 'answer' }}",
+            "dry_run": true
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "client",
+              "displayName": "client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "user",
+              "displayName": "user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "xc1",
+      "name": "POST /client1-dryrun-coach",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        800
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-coach",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "xc2",
+      "name": "Coach action list (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        800
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "once",
+        "workflowId": {
+          "__rl": true,
+          "value": "bsVhx7Sp3eHcvWsh",
+          "mode": "id",
+          "cachedResultName": "Client1 coach: action lists (2x/day)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dry_run": true,
+            "slot": "={{ $json.body.slot || 'am' }}",
+            "force_plan": "={{ $json.body.force_plan || 'viral' }}",
+            "posts_json": "={{ $json.body.posts ? JSON.stringify($json.body.posts) : '' }}",
+            "ignore_quiet": "={{ $json.body.ignore_quiet === true }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "slot",
+              "displayName": "slot",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "force_plan",
+              "displayName": "force_plan",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "posts_json",
+              "displayName": "posts_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ignore_quiet",
+              "displayName": "ignore_quiet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "xc3",
+      "name": "POST /client1-dryrun-coach-tick",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1000
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-coach-tick",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "xc4",
+      "name": "Coach tick (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        1000
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "once",
+        "workflowId": {
+          "__rl": true,
+          "value": "FXYkTqcnVGaRVLIb",
+          "mode": "id",
+          "cachedResultName": "Client1 coach: reminders + checks (30 min)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dry_run": true,
+            "force_plan": "={{ $json.body.force_plan || 'viral' }}",
+            "now": "={{ $json.body.now || 0 }}",
+            "with_check": false
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "force_plan",
+              "displayName": "force_plan",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "now",
+              "displayName": "now",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "with_check",
+              "displayName": "with_check",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "xb1",
+      "name": "POST /client1-dryrun-batch",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-dryrun-batch",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "xb2",
+      "name": "Draft batch (dry run)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        1200
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "once",
+        "workflowId": {
+          "__rl": true,
+          "value": "egzwmJyVfZ6uQiT1",
+          "mode": "id",
+          "cachedResultName": "Client1 batches: hourly drafts (15 min check)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dry_run": true,
+            "force_plan": "={{ $json.body.force_plan || '' }}",
+            "now": "={{ $json.body.now || 0 }}",
+            "ignore_timing": "={{ $json.body.ignore_timing === true }}",
+            "posts_json": "={{ $json.body.posts ? JSON.stringify($json.body.posts) : '' }}",
+            "targets_json": "={{ $json.body.targets ? JSON.stringify($json.body.targets) : '' }}",
+            "raw": "={{ $json.body.raw ? (typeof $json.body.raw === 'string' ? $json.body.raw : JSON.stringify($json.body.raw)) : '' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "force_plan",
+              "displayName": "force_plan",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "now",
+              "displayName": "now",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            },
+            {
+              "id": "ignore_timing",
+              "displayName": "ignore_timing",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "posts_json",
+              "displayName": "posts_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "targets_json",
+              "displayName": "targets_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "raw",
+              "displayName": "raw",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "POST /client1-dryrun-actions": {
+      "main": [
+        [
+          {
+            "node": "Actions (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /client1-dryrun-handler": {
+      "main": [
+        [
+          {
+            "node": "Handler (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /client1-dryrun-propose": {
+      "main": [
+        [
+          {
+            "node": "Propose post (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /client1-dryrun-engage": {
+      "main": [
+        [
+          {
+            "node": "Engagement drafter (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /client1-dryrun-onboard": {
+      "main": [
+        [
+          {
+            "node": "Onboarding (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /client1-dryrun-coach": {
+      "main": [
+        [
+          {
+            "node": "Coach action list (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /client1-dryrun-coach-tick": {
+      "main": [
+        [
+          {
+            "node": "Coach tick (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /client1-dryrun-batch": {
+      "main": [
+        [
+          {
+            "node": "Draft batch (dry run)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata"
+  },
+  "tags": []
+}

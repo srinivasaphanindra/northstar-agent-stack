@@ -1,0 +1,1473 @@
+{
+  "id": "FbTdLU9H465W10Yd",
+  "name": "Client1 bot: actions (approvals, commands, notify)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "payload",
+              "type": "string"
+            },
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a2",
+      "name": "Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst t = $('When called').first().json;\nlet p = {}; try { p = typeof t.payload === 'string' ? JSON.parse(t.payload) : (t.payload || {}); } catch (e) { throw new Error('bad payload'); }\nconst dry = t.dry_run === true || t.dry_run === 'true';\nif (p.op === 'notify') {\n  const slack = { channel: p.channel || 'C0000000001', text: String(p.text || '').slice(0, 3900), unfurl_links: false, unfurl_media: false };\n  if (p.thread_ts) slack.thread_ts = p.thread_ts;\n  return [{ json: { kind: 'notify', dry, slack, ack: { ids: [p.id] } } }];\n}\nreturn [{ json: { kind: 'op', dry, body: { ...p, dry_run: dry } } }];\n"
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Notify?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a3c",
+              "leftValue": "={{ $json.kind === 'notify' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Dry run? (notify)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a4c",
+              "leftValue": "={{ $json.dry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a5",
+      "name": "Slack: notify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        800,
+        60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "a6",
+      "name": "Helper: ack outbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1000,
+        60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/outbox/ack",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Parse').first().json.ack) }}"
+      }
+    },
+    {
+      "id": "a7",
+      "name": "Helper: op",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        600,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/op",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "a8",
+      "name": "After op",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// helper /op (or /guard/verdict) answer -> content check (LLM), Buffer operations (publish/delete), Buffer holds, or a Slack reply\nconst r = $json, src = $('Parse').first().json;\nif (r && r.check) return [{ json: { kind: 'check', dry: src.dry, check: r.check } }];\nconst holds = (!src.dry && r && Array.isArray(r.hold_ops)) ? r.hold_ops.map(o => ({ json: { kind: 'hold', ...o } })) : [];\nif (!r || (!r.reply && !(Array.isArray(r.buffer_ops) && r.buffer_ops.length))) return [{ json: { kind: 'none', dry: src.dry, info: r } }, ...holds];\nconst ops = Array.isArray(r.buffer_ops) ? r.buffer_ops : [];\nif (ops.length) return ops.map(o => ({ json: { kind: 'buffer', dry: src.dry, slack_ts: src.body.slack_ts, thread_ts: r.thread_ts, ...o } }));\nconst thread = r.thread_ts || src.body.thread_ts || '';\nconst slack = { channel: src.body.channel || 'C0000000001', text: String(r.reply || ''), unfurl_links: false, unfurl_media: false };\nif (thread) slack.thread_ts = thread;\nreturn [{ json: { kind: 'reply', dry: src.dry, has_text: !!r.reply, run_drafter: !!r.run_drafter && !src.dry, run_coach: !!r.run_coach && !src.dry, slack,\n                  delete_ts: (!src.dry && r.delete_ts) ? r.delete_ts : '' } }, ...holds];\n"
+      }
+    },
+    {
+      "id": "a9",
+      "name": "Buffer ops?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a9c",
+              "leftValue": "={{ $json.kind === 'buffer' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a10",
+      "name": "Dry run? (buffer)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        220
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a10c",
+              "leftValue": "={{ $json.dry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a10b",
+      "name": "Buffer ops",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        260
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "a11",
+      "name": "Buffer: mutate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1600,
+        260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      }
+    },
+    {
+      "id": "a12",
+      "name": "Wait 8 s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1800,
+        260
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 8,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "a13",
+      "name": "Build read-back",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        260
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// after the mutation: read the post back (status, dueAt, link). Deleted drafts: harmless account query.\nreturn $input.all().map((it, i) => {\n  const o = $('Buffer ops').all()[i].json;\n  const body = o.op === 'publish'\n    ? { query: 'query R($i: PostInput!) { post(input: $i) { id status dueAt sentAt externalLink } }', variables: { i: { id: o.post_id } } }\n    : { query: '{ account { id } }' };\n  return { json: { body } };\n});\n"
+      }
+    },
+    {
+      "id": "a14",
+      "name": "Buffer: read back",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2200,
+        260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      }
+    },
+    {
+      "id": "a15",
+      "name": "Collect results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        260
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst ops = $('Buffer ops').all().map(i => i.json);\nconst muts = $('Buffer: mutate').all().map(i => i.json);\nconst reads = $input.all().map(i => i.json);\nconst results = ops.map((o, i) => {\n  const m = muts[i] || {}, rd = reads[i] || {};\n  if (o.op === 'delete') {\n    const d = m.data && m.data.deletePost;\n    return { op: 'delete', service: o.service, post_id: o.post_id, ok: !!(d && d.id), error: d ? d.message : JSON.stringify(m.errors || m.error || m).slice(0, 200) };\n  }\n  const e = m.data && m.data.editPost;\n  const post = (rd.data && rd.data.post) || (e && e.post) || {};\n  const ok = !!(e && e.post);\n  return { op: 'publish', service: o.service, post_id: o.post_id, ok, status: post.status, dueAt: post.dueAt, externalLink: post.externalLink,\n           error: ok ? null : (e ? e.message : JSON.stringify(m.errors || m.error || m).slice(0, 200)) };\n});\nreturn [{ json: { body: { slack_ts: ops[0].slack_ts, results } } }];\n"
+      }
+    },
+    {
+      "id": "a16",
+      "name": "Helper: finish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2600,
+        260
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/op/finish",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "a17",
+      "name": "Finish reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        260
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst r = $json, src = $('Parse').first().json;\nconst slack = { channel: src.body.channel || 'C0000000001', text: String(r.reply || 'Done.'), unfurl_links: false, unfurl_media: false };\nconst th = r.thread_ts || src.body.thread_ts; if (th) slack.thread_ts = th;\nreturn [{ json: { slack } }];\n"
+      }
+    },
+    {
+      "id": "a19",
+      "name": "Has reply text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        480
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.has_text);"
+      }
+    },
+    {
+      "id": "a20",
+      "name": "Dry run? (reply)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a20c",
+              "leftValue": "={{ $json.dry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a18",
+      "name": "Slack: reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3000,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "a21",
+      "name": "Run drafter?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        380
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a21c",
+              "leftValue": "={{ $json.run_drafter }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a22",
+      "name": "Run engagement drafter (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        380
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "once",
+        "workflowId": {
+          "__rl": true,
+          "value": "lP4iZYQA5jvtNaiD",
+          "mode": "id",
+          "cachedResultName": "Client1 engage: drafter (X, 2x/day)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dry_run": false
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    },
+    {
+      "id": "a42",
+      "name": "Run coach?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        1250
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a42c",
+              "leftValue": "={{ $json.run_coach }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a43",
+      "name": "Run coach action list (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1400,
+        1250
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "once",
+        "workflowId": {
+          "__rl": true,
+          "value": "bsVhx7Sp3eHcvWsh",
+          "mode": "id",
+          "cachedResultName": "Client1 coach: action lists (2x/day)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "dry_run": false,
+            "slot": "extra",
+            "force_plan": "",
+            "posts_json": ""
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "slot",
+              "displayName": "slot",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "force_plan",
+              "displayName": "force_plan",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "posts_json",
+              "displayName": "posts_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    },
+    {
+      "id": "a99",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nreturn [{ json: { dry_run: true, parse: $('Parse').first().json, would: $input.all().map(i => i.json) } }];\n"
+      }
+    },
+    {
+      "id": "a30",
+      "name": "Content check?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        500
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a30c",
+              "leftValue": "={{ $json.kind === 'check' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a31",
+      "name": "Content check (LLM)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "onError": "continueRegularOutput",
+      "position": [
+        1200,
+        640
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.check.prompt }}"
+      }
+    },
+    {
+      "id": "a32",
+      "name": "Checker model (cheap)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        840
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "google/gemini-3.1-flash-lite"
+        },
+        "options": {
+          "temperature": 0,
+          "maxTokens": 200
+        }
+      }
+    },
+    {
+      "id": "a33",
+      "name": "Verdict body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        640
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// classifier output -> helper judges it (fail closed: empty / unparseable output never publishes)\nconst ck = $('After op').first().json.check, src = $('Parse').first().json;\nconst raw = String($json.text || $json.output || '');\nreturn [{ json: { body: { slack_ts: ck.slack_ts, raw, now: !!ck.now, by: ck.by, dry_run: !!src.dry } } }];\n"
+      }
+    },
+    {
+      "id": "a34",
+      "name": "Helper: verdict",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1600,
+        640
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/guard/verdict",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "a35",
+      "name": "After verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        640
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// helper /op (or /guard/verdict) answer -> content check (LLM), Buffer operations (publish/delete), Buffer holds, or a Slack reply\nconst r = $json, src = $('Parse').first().json;\nif (r && r.check) return [{ json: { kind: 'check', dry: src.dry, check: r.check } }];\nconst holds = (!src.dry && r && Array.isArray(r.hold_ops)) ? r.hold_ops.map(o => ({ json: { kind: 'hold', ...o } })) : [];\nif (!r || (!r.reply && !(Array.isArray(r.buffer_ops) && r.buffer_ops.length))) return [{ json: { kind: 'none', dry: src.dry, info: r } }, ...holds];\nconst ops = Array.isArray(r.buffer_ops) ? r.buffer_ops : [];\nif (ops.length) return ops.map(o => ({ json: { kind: 'buffer', dry: src.dry, slack_ts: src.body.slack_ts, thread_ts: r.thread_ts, ...o } }));\nconst thread = r.thread_ts || src.body.thread_ts || '';\nconst slack = { channel: src.body.channel || 'C0000000001', text: String(r.reply || ''), unfurl_links: false, unfurl_media: false };\nif (thread) slack.thread_ts = thread;\nreturn [{ json: { kind: 'reply', dry: src.dry, has_text: !!r.reply, run_drafter: !!r.run_drafter && !src.dry, run_coach: !!r.run_coach && !src.dry, slack,\n                  delete_ts: (!src.dry && r.delete_ts) ? r.delete_ts : '' } }, ...holds];\n"
+      }
+    },
+    {
+      "id": "a36",
+      "name": "Only hold ops",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.kind === 'hold');"
+      }
+    },
+    {
+      "id": "a37",
+      "name": "Buffer: hold to draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1200,
+        1000
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      }
+    },
+    {
+      "id": "a38",
+      "name": "Hold results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        1000
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// after 'pause everything': each queued Buffer post -> editPost saveToDraft:true; ok only if Buffer now says draft\nconst ops = $('Only hold ops').all().map(i => i.json);\nconst results = $input.all().map((it, i) => {\n  const e = it.json && it.json.data && it.json.data.editPost, st = e && e.post ? String(e.post.status || '') : '';\n  return { slack_ts: ops[i].slack_ts, post_id: ops[i].post_id, service: ops[i].service, ok: !!(e && e.post) && st.toLowerCase() === 'draft', status: st,\n           error: e && e.message ? e.message : (it.json.error ? String(it.json.error.message || it.json.error).slice(0, 200) : '') };\n});\nreturn [{ json: { body: { results } } }];\n"
+      }
+    },
+    {
+      "id": "a39",
+      "name": "Helper: hold done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1600,
+        1000
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/guard/hold_done",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "a40",
+      "name": "Only deletes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        1100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.kind === 'reply' && i.json.delete_ts).map(i => ({ json: { body: { channel: i.json.slack.channel, ts: i.json.delete_ts } } }));"
+      }
+    },
+    {
+      "id": "a41",
+      "name": "Slack: delete pasted secret",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1200,
+        1150
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.delete",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "a23",
+      "name": "Receipt (after reply)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst b = $('Parse').first().json.body || {};\nif (!b.ts || $('Parse').first().json.dry) return [];\nreturn [{ json: { channel: b.channel || 'C0000000001', ts: b.ts, ok: !!$json.ok, note: $json.ok ? '' : 'Sorry, I could not post my answer (' + ($json.error || 'Slack error') + ').', thread_ts: b.thread_ts || b.ts } }];\n"
+      }
+    },
+    {
+      "id": "a24",
+      "name": "Receipt (op failed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        700
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// ops that produced no reply: benign (already handled / not the approver / noop) -> ✅; real failure -> ⚠️ + note\nconst src = $('Parse').first().json, b = src.body || {};\nif (!b.ts || src.dry) return [];\nreturn $input.all().filter(i => i.json.kind === 'none').map(i => {\n  const e = String((i.json.info && (i.json.info.error || i.json.info.message)) || '');\n  const benign = !e || /already handled|not the approver|unknown op noop|state /.test(e);\n  return { json: { channel: b.channel || 'C0000000001', ts: b.ts, ok: benign, note: benign ? '' : 'Sorry, I could not process that (' + e.slice(0, 150) + '). Nothing was published or changed.', thread_ts: b.thread_ts || b.ts } };\n});\n"
+      }
+    },
+    {
+      "id": "a25",
+      "name": "Read receipt (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3400,
+        560
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "qg4LM5nI80u7kvnV",
+          "mode": "id",
+          "cachedResultName": "Client bot: read receipt (reusable)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $json.channel }}",
+            "ts": "={{ $json.ts }}",
+            "ok": "={{ $json.ok }}",
+            "note": "={{ $json.note }}",
+            "thread_ts": "={{ $json.thread_ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ok",
+              "displayName": "ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "node": "Notify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify?": {
+      "main": [
+        [
+          {
+            "node": "Dry run? (notify)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Helper: op",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run? (notify)": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: notify": {
+      "main": [
+        [
+          {
+            "node": "Helper: ack outbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: op": {
+      "main": [
+        [
+          {
+            "node": "After op",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "After op": {
+      "main": [
+        [
+          {
+            "node": "Content check?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Only hold ops",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Only deletes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content check?": {
+      "main": [
+        [
+          {
+            "node": "Content check (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buffer ops?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content check (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Verdict body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verdict body": {
+      "main": [
+        [
+          {
+            "node": "Helper: verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: verdict": {
+      "main": [
+        [
+          {
+            "node": "After verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "After verdict": {
+      "main": [
+        [
+          {
+            "node": "Buffer ops?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only hold ops": {
+      "main": [
+        [
+          {
+            "node": "Buffer: hold to draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: hold to draft": {
+      "main": [
+        [
+          {
+            "node": "Hold results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold results": {
+      "main": [
+        [
+          {
+            "node": "Helper: hold done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only deletes": {
+      "main": [
+        [
+          {
+            "node": "Slack: delete pasted secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer ops?": {
+      "main": [
+        [
+          {
+            "node": "Dry run? (buffer)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has reply text",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Run drafter?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Run coach?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Receipt (op failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run? (buffer)": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buffer ops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer ops": {
+      "main": [
+        [
+          {
+            "node": "Buffer: mutate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: mutate": {
+      "main": [
+        [
+          {
+            "node": "Wait 8 s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 8 s": {
+      "main": [
+        [
+          {
+            "node": "Build read-back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build read-back": {
+      "main": [
+        [
+          {
+            "node": "Buffer: read back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buffer: read back": {
+      "main": [
+        [
+          {
+            "node": "Collect results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect results": {
+      "main": [
+        [
+          {
+            "node": "Helper: finish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: finish": {
+      "main": [
+        [
+          {
+            "node": "Finish reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish reply": {
+      "main": [
+        [
+          {
+            "node": "Slack: reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has reply text": {
+      "main": [
+        [
+          {
+            "node": "Dry run? (reply)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run? (reply)": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run drafter?": {
+      "main": [
+        [
+          {
+            "node": "Run engagement drafter (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run coach?": {
+      "main": [
+        [
+          {
+            "node": "Run coach action list (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: reply": {
+      "main": [
+        [
+          {
+            "node": "Receipt (after reply)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt (after reply)": {
+      "main": [
+        [
+          {
+            "node": "Read receipt (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt (op failed)": {
+      "main": [
+        [
+          {
+            "node": "Read receipt (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checker model (cheap)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Content check (LLM)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

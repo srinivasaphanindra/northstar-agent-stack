@@ -1,0 +1,786 @@
+{
+  "id": "FFKpguli7WZX9cuz",
+  "name": "Client1 bot",
+  "active": false,
+  "nodes": [
+    {
+      "id": "h1",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "channel",
+              "type": "string"
+            },
+            {
+              "name": "ts",
+              "type": "string"
+            },
+            {
+              "name": "thread_ts",
+              "type": "string"
+            },
+            {
+              "name": "user",
+              "type": "string"
+            },
+            {
+              "name": "text",
+              "type": "string"
+            },
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            },
+            {
+              "name": "announce",
+              "type": "string"
+            },
+            {
+              "name": "context",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "h2",
+      "name": "Announcement?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "h2c",
+              "leftValue": "={{ !!$json.announce }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h3",
+      "name": "Prepare announcement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst t = $('When called').first().json;\nreturn [{ json: { slack: { channel: t.channel || 'C0000000001', text: String(t.announce), unfurl_links: false } } }];\n"
+      }
+    },
+    {
+      "id": "h14",
+      "name": "Load memory + notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://127.0.0.1:8771/context",
+        "options": {
+          "timeout": 8000
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ thread: ($json.channel || 'C0000000001') + ':' + ($json.thread_ts || $json.ts), turns: 20 }) }}"
+      }
+    },
+    {
+      "id": "h15",
+      "name": "Build prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Builds the agent input from persistent memory (client1-state SQLite) + notes.md. No LLM here.\nconst t = $('When called').first().json;\nconst c = $json || {};\nconst hist = Array.isArray(c.history) ? c.history : [];\nconst lines = hist.map(h => (h.role === 'user' ? 'the owner' : 'You') + ': ' + String(h.text).slice(0, 1500));\nconst editing = String(t.context || '').startsWith('editing:')\n  ? 'He reacted ✏️ (edit) on your latest post preview in this thread. This message is the change he wants: rewrite the post and call propose_post again with the full revised text and the same services.'\n  : '';\nconst prompt = (lines.length ? 'Earlier in this Slack thread (oldest first):\\n' + lines.join('\\n') + '\\n\\n' : '')\n  + (editing ? editing + '\\n\\n' : '') + 'New Slack message from <@' + t.user + '>:\\n' + t.text;\nreturn [{ json: { prompt, notes: String(c.notes || '(notes file unavailable this turn)').slice(0, 8000),\n                  guard: String(c.guard || '(limits unavailable this turn: assume caps X 5/3, LinkedIn 3/2, Facebook 5/3 engagement/posts per day)'),\n                  thread_key: (t.channel || 'C0000000001') + ':' + (t.thread_ts || t.ts), history_turns: Math.floor(hist.length / 2) } }];\n"
+      }
+    },
+    {
+      "id": "h4",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "onError": "continueRegularOutput",
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "=You are Owner's client-1 social media assistant, chatting with him in the Slack channel #client1.\nClient 1 accounts: X @your_x_handle, LinkedIn in/your-linkedin-handle, Facebook Page \"YourBrand\" (all three connected in Buffer).\nNow: {{ $now.setZone('Asia/Kolkata').toFormat('cccc d LLL yyyy, HH:mm') }} IST.\n\nCLIENT NOTES (notes.md: voice, business, audience, rules; follow them):\n{{ $('Build prompt').first().json.notes }}\n\nWhat you do:\n- Draft posts for X (max 280 chars), LinkedIn and Facebook in the client's voice (see notes).\n- Research profiles, audience and topics with browser_task (READ-ONLY: it opens pages and reads, nothing else).\n- When he wants a post (or agrees to a draft you showed), call propose_post with the exact final text and the services.\n  It saves Buffer DRAFTS and posts a preview in this thread with the draft ids; he then reacts ✅ publish, ✏️ edit or ❌ discard\n  (or types 'approve' / 'post it' / 'post it now'). Publishing happens only through his reaction, never through you.\n  If he said to post it 'now', pass when='now', else when='queue'. After propose_post, reply in one short line (the preview is already in the thread; do not repeat the text).\n- If this message is an edit request for a preview, rewrite and call propose_post again with the full new text (the old draft is replaced).\n\nHandled automatically (no need for you): 'remember: ...' (adds to notes), 'pause engagement', 'resume engagement', 'limits',\n'engagement status', 'suggest engagement'. X engagement ideas (replies/reposts only; no automated likes per X April 2026 rules) are posted here twice a day for his ✅/❌.\nPlans: Starter / Growth / Viral (the plan and today's caps are in Live limits). On Viral, a coach posts an 'Action list' of MANUAL tasks\ntwice a day (morning and evening IST): replies to trending posts, quote posts, early comments on creator posts, busy threads, answering\nreplies on his own posts, with ready drafts and 'Open in app' links; he reacts ✅ done / ⏭ skip. Growth on Viral comes from HIS OWN\nactions; automation stays low on purpose (X flagged @your_x_handle for automated replies on 2026-10-09). If he asks for more automated\nvolume, explain that and point him to the action list (manual replies are safe and count more).\nMore commands: 'action list' (an extra list now), 'shorter lists' / 'normal lists', 'my score', 'report warning x' (tells me X showed\na warning: warm-up steps back, automated engagement pauses), 'switch plan <starter|growth|viral>' (the owner only).\nDraft batches (all plans with batches on; see Live limits): during his active hours (default 09:00-21:00 IST) about once an hour on Viral\n(every ~3 hours on Starter) the bot posts ONE message with a small batch of ready drafts (posts, X replies, LinkedIn/Facebook comments with\nthe target link); each item is in the thread with ✅ / ✏️ / ❌, or he types '1 ✅', '2 ❌', 'approve all', '3: new wording'. Approved items go\ninto a paced queue (caps, gaps, max per hour, active hours); posts go to Buffer's queue, replies/comments are done once by the browser agent.\nBatches pause by themselves after 2 batches without any reaction (one 'still there?' a day). Commands: 'watch @handle' / 'unwatch' / 'watchlist' (auto X reply targets), 'comment on <LinkedIn/Facebook post\nlink> <one line on what the post says>' (lines up an approval-only comment for the next batch; the bot never opens LI/FB posts just to read them: LinkedIn and Facebook terms restrict automation, so these\nstay tiny, only after his ✅, max 1 an hour, and any warning pauses that platform for 7 days), 'next batch', 'pause batches',\n'resume batches', 'batch status'. You never find LinkedIn/Facebook posts yourself for comments; he picks them.\n\nGUARDRAILS (also enforced in code by the helper; your job is to explain them kindly).\nLive limits now: {{ $('Build prompt').first().json.guard }}\n- When a request crosses a limit, never just refuse. In plain friendly words give the reason in one sentence AND offer a safe alternative in the same reply. Examples:\n  • \"50 comments today\" → that many in a day looks like a bot and can get the account restricted; today's safe limit is the number in Live limits; offer to line up that many good, specific ones for his ✅ ('suggest engagement').\n  • fake reviews or testimonials, made-up numbers or results → explain why not; offer a post inviting real reviews, or use a real one he pastes, or say it without the number.\n  • follows, unfollows, DMs, likes, mass likes, copy-paste comments, hashtag stacks → never automated (X April 2026 forbids automated likes); offer one thoughtful reply for ✅, or they can like it themselves.\n  • medical, legal or financial advice → offer a general tip plus \"check with a professional\". Politics or religion → only if the client opted in (see Live limits); otherwise keep it about the work.\n  • a website that is not in the allowed browser sites → do not call browser_task; ask him to paste the text, or say the owner can add the site.\n  • spend or browser allowance used up → say so, keep helping with drafts, mention that the owner can upgrade the plan.\n  • EVERYTHING PAUSED → you can still chat and draft; nothing goes out until the owner says 'resume everything'.\n- Drafts must be true, match the voice in the notes, and use only numbers that appear in the notes.\n- If a tool answers blocked / refused / NOT RUN with a message, pass it on in your own words with the alternative. Do not retry the same text.\n- Scope: you only help with social media and online presence. For anything else (accounting, legal work, coding, IT support, personal errands...) reply with ONE friendly line that this is outside what you do and that you've flagged it to the owner, offer something related you CAN do if there is one, and end your reply with this exact marker on its own line: [[out_of_scope: <5-12 word summary of the ask>]] (it is removed before posting). Never use the marker for limit, safety or allowed-site refusals: those are in scope.\n- Commands handled automatically: 'limits' (today's usage), 'pause everything' (anyone) / 'resume everything' (the owner only), 'weekly report', 'sign in link'.\n\nHard rules:\n- Never publish, queue or schedule anything yourself. Never DM, follow, like, react, comment, repost or connect on any platform. Never log in anywhere.\n- Never ask for or repeat passwords, API keys or tokens. To connect an account, offer the one-time sign-in link ('sign in link'): the client logs in himself.\n- If a tool fails or a page needs a login, say so plainly; never invent results or numbers.\n- Keep replies short (a few lines or bullets). Slack formatting: *bold*, • bullets; no markdown headings or tables.",
+          "maxIterations": 8
+        }
+      }
+    },
+    {
+      "id": "h5",
+      "name": "OpenRouter model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        780,
+        520
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "google/gemini-3.1-flash-lite"
+        },
+        "options": {
+          "temperature": 0.5,
+          "maxTokens": 1200
+        }
+      }
+    },
+    {
+      "id": "h7",
+      "name": "browser_task",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        520
+      ],
+      "parameters": {
+        "description": "READ-ONLY browser in client 1's Chrome (X, LinkedIn, Facebook, any website). Give one precise task with the URL, e.g. 'Open https://x.com/your_x_handle and summarise the bio and last 5 posts'. It cannot post, like, follow or message. Takes 20-120 s. Returns status and result_text; status 'stopped' usually means a login wall.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "YB9lz9pnKolDfFiX",
+          "mode": "id",
+          "cachedResultName": "Tool: Browser task (client1)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task": "={{ $fromAI('task', 'Precise read-only browsing task: the URL to open and what to extract', 'string') }}",
+            "max_steps": "={{ $fromAI('max_steps', 'Max browser steps, 5-25 (15 is a good default)', 'number') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "task",
+              "displayName": "task",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "max_steps",
+              "displayName": "max_steps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      }
+    },
+    {
+      "id": "h8",
+      "name": "propose_post",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1060,
+        520
+      ],
+      "parameters": {
+        "description": "Propose ONE post for approval: saves it as Buffer DRAFT(s) (one per service) and posts a preview in this Slack thread with the draft ids and ✅ publish / ✏️ edit / ❌ discard. Nothing is published until the owner approves. services: comma list of x, linkedin, facebook (e.g. 'x' or 'x,linkedin'). X text max 280 chars. when: 'queue' (default, Buffer's next queue slot) or 'now' (only if he said now). Returns the draft ids or an error.",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "FBNBcOKeRVx0gMHw",
+          "mode": "id",
+          "cachedResultName": "Tool: Propose post (client1)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ $fromAI('text', 'Exact final post text', 'string') }}",
+            "services": "={{ $fromAI('services', 'Comma list: x, linkedin, facebook', 'string') }}",
+            "when": "={{ $fromAI('when', 'queue or now', 'string') }}",
+            "channel": "={{ $('When called').first().json.channel || 'C0000000001' }}",
+            "thread_ts": "={{ $('When called').first().json.thread_ts || $('When called').first().json.ts }}",
+            "dry_run": "={{ $('When called').first().json.dry_run === true }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "services",
+              "displayName": "services",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "when",
+              "displayName": "when",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        }
+      }
+    },
+    {
+      "id": "h10",
+      "name": "Prepare reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst t = $('When called').first().json;\nlet out = ($json.output ?? $json.text ?? '').toString().trim();\nconst err = $json.error ? String($json.error.message || $json.error) : '';\n// out-of-scope marker from the agent -> logged by the helper (upsell-log.md + note to the owner), never shown in Slack\nlet scope = null;\nconst sm = out.match(/\\[\\[\\s*out[_ ]of[_ ]scope\\s*:\\s*([^\\]]{0,200})\\]\\]/i);\nif (sm) { scope = sm[1].trim(); out = out.replace(sm[0], '').trim(); }\nconst slackify = x => x.replace(/\\*\\*(.+?)\\*\\*/g, '*$1*').replace(/^#{1,6}\\s+(.*)$/gm, '*$1*').replace(/\\[([^\\]]+)\\]\\((https?:[^)]+)\\)/g, '<$2|$1>');\nconst text = slackify(out) || (err ? `Sorry, I hit an error: ${err.slice(0, 300)}` : 'Sorry, I could not produce a reply.');\nconst thread = t.thread_ts || t.ts;\nconst dry = t.dry_run === true || t.dry_run === 'true';\nreturn [{ json: { failed: !out, channel: t.channel || 'C0000000001', thread_ts: thread, text: text.slice(0, 3900),\n  dry_run: dry,\n  scope: scope ? { op: 'scope', by: t.user, ts: t.ts, thread_ts: thread, channel: t.channel || 'C0000000001', text: String(t.text || '').slice(0, 500), summary: scope, dry_run: dry } : null,\n  slack: { channel: t.channel || 'C0000000001', thread_ts: thread, text: text.slice(0, 3900), unfurl_links: false, unfurl_media: false },\n  mem: { thread: (t.channel || 'C0000000001') + ':' + thread, user_text: String(t.text || ''), bot_text: text.slice(0, 3900) } } }];\n"
+      }
+    },
+    {
+      "id": "h16",
+      "name": "Save memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1320,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/memory",
+        "options": {
+          "timeout": 8000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.mem) }}"
+      }
+    },
+    {
+      "id": "h11",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "h11c",
+              "leftValue": "={{ $json.dry_run }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "h12",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst p = $('Prepare reply').first().json;\nreturn [{ json: { ok: true, dry_run: true, would_post: p.slack, out_of_scope: p.scope, memory_turns_loaded: $('Build prompt').first().json.history_turns } }];\n"
+      }
+    },
+    {
+      "id": "h9",
+      "name": "Slack: chat.postMessage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "h13",
+      "name": "Check Slack response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Slack answer -> read receipt on the human's message (👀 -> ✅, or ⚠️ + note). Announcements/dry runs have none.\nconst t = $('When called').first().json;\nlet failed = false; try { failed = !!$('Prepare reply').first().json.failed; } catch (e) {}\nconst posted = !!$json.ok;\nif (t.announce || !t.ts) return [{ json: { ok: posted, posted, ts: $json.ts, receipt: null } }];\nreturn [{ json: { ok: posted, posted, ts: $json.ts, receipt: { channel: t.channel || 'C0000000001', ts: t.ts, ok: posted && !failed,\n  note: posted ? '' : 'Sorry, my reply failed to post (' + ($json.error || 'Slack error') + '). Please try again.', thread_ts: t.thread_ts || t.ts } } }];\n"
+      }
+    },
+    {
+      "id": "h19",
+      "name": "Out of scope?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -60
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Prepare reply').first().json.scope; return s ? [{ json: { body: s } }] : [];"
+      }
+    },
+    {
+      "id": "h20",
+      "name": "Helper: log out-of-scope",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1540,
+        -60
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/op",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "h17",
+      "name": "Receipt item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.receipt).map(i => ({ json: i.json.receipt }));"
+      }
+    },
+    {
+      "id": "h18",
+      "name": "Read receipt (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "qg4LM5nI80u7kvnV",
+          "mode": "id",
+          "cachedResultName": "Client bot: read receipt (reusable)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $json.channel }}",
+            "ts": "={{ $json.ts }}",
+            "ok": "={{ $json.ok }}",
+            "note": "={{ $json.note }}",
+            "thread_ts": "={{ $json.thread_ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ok",
+              "displayName": "ok",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "note",
+              "displayName": "note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Announcement?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Announcement?": {
+      "main": [
+        [
+          {
+            "node": "Prepare announcement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load memory + notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare announcement": {
+      "main": [
+        [
+          {
+            "node": "Slack: chat.postMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load memory + notes": {
+      "main": [
+        [
+          {
+            "node": "Build prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build prompt": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Prepare reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare reply": {
+      "main": [
+        [
+          {
+            "node": "Save memory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Out of scope?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Out of scope?": {
+      "main": [
+        [
+          {
+            "node": "Helper: log out-of-scope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: chat.postMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: chat.postMessage": {
+      "main": [
+        [
+          {
+            "node": "Check Slack response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Slack response": {
+      "main": [
+        [
+          {
+            "node": "Receipt item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt item": {
+      "main": [
+        [
+          {
+            "node": "Read receipt (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "browser_task": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "propose_post": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Kolkata",
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

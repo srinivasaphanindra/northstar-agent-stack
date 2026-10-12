@@ -1,0 +1,933 @@
+{
+  "id": "lP4iZYQA5jvtNaiD",
+  "name": "Client1 engage: drafter (X, 2x/day)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "e1",
+      "name": "10:40 and 17:20 IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "40 10 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "20 17 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e2",
+      "name": "Random jitter 0-20 min",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { wait_s: Math.floor(Math.random() * 1201), dry_run: false, source: 'schedule' } }];"
+      }
+    },
+    {
+      "id": "e3",
+      "name": "Wait jitter",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $json.wait_s }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "e4",
+      "name": "Webhook (manual run)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "client1-engage-draft",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      }
+    },
+    {
+      "id": "e5",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        380
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e6",
+      "name": "Start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst j = $input.first().json || {};\nconst b = j.body || j;\nconst source = j.source || (j.body ? 'webhook' : 'subworkflow');\nreturn [{ json: { body: { dry_run: b.dry_run === true || b.dry_run === 'true', source }, dry_run: b.dry_run === true || b.dry_run === 'true', source } }];\n"
+      }
+    },
+    {
+      "id": "e7",
+      "name": "Helper: engage plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        820,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/engage/plan",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "e8",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst p = $json, st = $('Start').first().json;\nif (!p || !p.ok_to_run) return [];          // paused (kill switch) or helper down -> do nothing, no LLM\nconst kind = p.read_type || 'x_following';\nconst where = kind === 'x_watch' ? 'watchlist search (from:handles only — not a keyword/topic search)' : 'Following / Home timeline (accounts you follow)';\nconst task = `Open ${p.search_url} . READ-ONLY task on X ${where} (logged in as @your_x_handle; do not like, reply, follow, repost or click any button).\nWait for the posts to load. Use the extract action once to read the first 8 posts (scroll down once only if fewer than 6 are visible).\nFor each post get: url (its permalink https://x.com/<handle>/status/<id>, from the post's timestamp link), handle, name, text (full post text), age (e.g. 3h, 1d), replies, likes.\nSkip promoted/ad posts. Then call done with ONLY a JSON array of these posts and nothing else.`;\nreturn [{ json: { task, plan: p, dry_run: st.dry_run } }];\n"
+      }
+    },
+    {
+      "id": "e9",
+      "name": "Browser: read X targets (read-only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1220,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8770/task",
+        "options": {
+          "timeout": 660000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $json.task, max_steps: 14, allow_write: false }) }}"
+      }
+    },
+    {
+      "id": "e10",
+      "name": "Assess result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst r = $json || {}, g = $('Gate').first().json;\nconst txt = String(r.result_text || (r.error && (r.error.message || r.error)) || '');\nconst status = r.status || 'error';\nif (status === 'stopped' && !/read-only mode: refused/i.test(txt)) {\n  return [{ json: { danger: true, reason: txt.slice(0, 400), status, dry_run: g.dry_run } }];\n}\nlet posts = [];\nconst m = txt.match(/\\[[\\s\\S]*\\]/);\nif (m) { try { posts = JSON.parse(m[0]); } catch (e) { posts = []; } }\nreturn [{ json: { danger: false, status, browser_id: r.id, posts: Array.isArray(posts) ? posts.slice(0, 10) : [], raw: posts.length ? '' : txt.slice(0, 500), dry_run: g.dry_run } }];\n"
+      }
+    },
+    {
+      "id": "e11",
+      "name": "Warning / captcha / login?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "e11c",
+              "leftValue": "={{ $json.danger }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e12",
+      "name": "Pause + report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nreturn [{ json: { body: { reason: 'auto: engagement drafter browser stopped: ' + $json.reason, by: 'engage-drafter', dry_run: $json.dry_run },\n  slack: { channel: 'C0000000001', unfurl_links: false,\n    text: ':warning: Engagement paused automatically. While reading X (read-only) the browser stopped on a warning / login / captcha-type page:\\n> ' + $json.reason + '\\nNo actions were taken. Please check @your_x_handle yourself, then say \\'resume engagement\\' when it looks fine.' } } }];\n"
+      }
+    },
+    {
+      "id": "e13",
+      "name": "Helper: pause engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2020,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/engage/pause",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "e13b",
+      "name": "Report text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Pause + report').first().json; return s.body.dry_run ? [] : [{ json: { slack: s.slack } }];"
+      }
+    },
+    {
+      "id": "e14",
+      "name": "Slack: report pause",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2420,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "e15",
+      "name": "Helper: filter seen posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1820,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/engage/filter",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ posts: $json.posts }) }}"
+      }
+    },
+    {
+      "id": "e15b",
+      "name": "Helper: notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2020,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:8771/context",
+        "options": {
+          "timeout": 8000
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ thread: 'engage-drafter', turns: 0 }) }}"
+      }
+    },
+    {
+      "id": "e16",
+      "name": "LLM prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst posts = $('Helper: filter seen posts').first().json.posts || [], plan = $('Gate').first().json.plan;\nif (!posts.length) return [];\nlet notes = ''; try { notes = $('Helper: notes').first().json.notes || ''; } catch (e) {}\nconst prompt = `You help the owner (X account @your_x_handle) engage in a friendly, human way. Client notes:\\n${notes.slice(0, 4000)}\\n\nTopic of this round: ${plan.topic}. Recent X posts (JSON):\\n${JSON.stringify(posts.map(p => ({ url: p.url, handle: p.handle, text: String(p.text || '').slice(0, 600), age: p.age, likes: p.likes })), null, 0)}\\n\nPick at most 3 posts that are genuinely worth engaging with (skip politics, controversy, crypto, giveaways, engagement bait, ads, sales pitches, huge brand accounts, or anything off-topic).\nFor each pick ONE action, only from ${JSON.stringify(plan.allowed_actions || ['reply', 'repost'])}: \"reply\" (preferred: a short friendly comment)${(plan.allowed_actions || []).includes('like') ? ', \"like\"' : ''} or \"repost\" (at most one repost, only for a really useful post).\nReply rules: under 200 characters, 1-2 short sentences, mention one concrete detail from their post, sound like a real person texting (lowercase start ok), ask a real question or share a plain small tip/experience.\nNever: links, hashtags, @mentions, emojis, em dashes, pitching, products, offers, \"DM me\", \"check out\", generic praise like \"great post\"/\"love this\"/\"so true\", invented numbers or claims about clients.\nReturn ONLY a JSON array, no prose: [{\"url\": \"...\", \"action\": \"${(plan.allowed_actions || ['reply', 'repost']).join('|')}\", \"text\": \"comment text or empty for like/repost\", \"why\": \"max 12 words\"}]`;\nreturn [{ json: { prompt } }];\n"
+      }
+    },
+    {
+      "id": "e17",
+      "name": "Draft comments (LLM)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        2420,
+        300
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      }
+    },
+    {
+      "id": "e18",
+      "name": "OpenRouter model (drafter)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        500
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "google/gemini-3.1-flash-lite"
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 900
+        }
+      }
+    },
+    {
+      "id": "e19",
+      "name": "Parse + validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2620,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst raw = String($json.text || $json.output || '');\nlet arr = []; const m = raw.match(/\\[[\\s\\S]*\\]/);\nif (m) { try { arr = JSON.parse(m[0]); } catch (e) { arr = []; } }\nconst posts = $('Helper: filter seen posts').first().json.posts || [];\nconst byUrl = Object.fromEntries(posts.map(p => [String(p.url).split('?')[0], p]));\nconst items = [];\nfor (const s of (Array.isArray(arr) ? arr : [])) {\n  const url = String(s.url || '').split('?')[0], p = byUrl[url];\n  const action = String(s.action || '').toLowerCase();\n  const acts = ($('Gate').first().json.plan || {}).allowed_actions || ['reply', 'repost'];\n  if (!p || !acts.includes(action)) continue;\n  const text = action === 'reply' ? String(s.text || '').replace(/\\s+/g, ' ').trim() : '';\n  if (action === 'reply' && (!text || text.length >= 200)) continue;\n  items.push({ url, handle: String(p.handle || '').replace(/^@+/, ''), post_text: String(p.text || ''), age: p.age || '', action, text, why: String(s.why || '').slice(0, 120) });\n}\nif (items.filter(i => i.action === 'repost').length > 1) { let seen = false; for (let i = items.length - 1; i >= 0; i--) if (items[i].action === 'repost') { if (seen) items.splice(i, 1); else seen = true; } }\nreturn [{ json: { body: { items: items.slice(0, 3) } } }];\n"
+      }
+    },
+    {
+      "id": "e20",
+      "name": "Helper: lint (reply-lint.py)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2820,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/engage/lint",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "e21",
+      "name": "Suggestion messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3020,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst items = ($json.items || []).filter(i => i.action !== 'reply' || (i.lint || []).length === 0).slice(0, 3);\nconst dry = $('Gate').first().json.dry_run;\nconst topic = $('Gate').first().json.plan.topic;\nconst LABEL = { reply: 'Reply', like: 'Like', repost: 'Repost' };\nreturn items.map((s, k) => {\n  const excerpt = s.post_text.replace(/\\s+/g, ' ').slice(0, 220) + (s.post_text.length > 220 ? '…' : '');\n  const text = `*X engagement idea ${k + 1}/${items.length}* for @your_x_handle (topic: ${topic})\\n`\n    + `*Post:* <${s.url}|@${s.handle}>${s.age ? ' (' + s.age + ')' : ''}\\n> ${excerpt}\\n`\n    + `*Proposed action:* ${LABEL[s.action]}${s.action === 'reply' ? '\\n> ' + s.text : ''}\\n`\n    + (s.why ? `_Why:_ ${s.why}\\n` : '')\n    + `React ✅ to do exactly this once, ❌ to skip. (Max ${$('Gate').first().json.plan.cap} actions a day, ${$('Gate').first().json.plan.min_gap_minutes || 7}+ min apart. Say 'pause engagement' to stop everything.)`;\n  return { json: { dry, suggestion: { action: s.action, url: s.url, handle: s.handle, text: s.text, topic },\n                   slack: { channel: 'C0000000001', text, unfurl_links: false, unfurl_media: false } } };\n});\n"
+      }
+    },
+    {
+      "id": "e22",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3220,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "e22c",
+              "leftValue": "={{ $json.dry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e23",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3420,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { dry_run: true, would_post: $input.all().map(i => i.json) } }];"
+      }
+    },
+    {
+      "id": "e24",
+      "name": "Slack: post suggestion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3420,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "e25",
+      "name": "Reaction buttons",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3620,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst sug = $('Suggestion messages').all().map(i => i.json);\nconst out = [];\n$input.all().forEach((it, i) => {\n  if (!it.json.ok) return;\n  for (const name of ['white_check_mark', 'x']) out.push({ json: { body: { channel: it.json.channel, timestamp: it.json.ts, name } } });\n});\nreturn out;\n"
+      }
+    },
+    {
+      "id": "e26",
+      "name": "Slack: add reactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3820,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/reactions.add",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "e27",
+      "name": "Register bodies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4020,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst sug = $('Suggestion messages').all().map(i => i.json);\nreturn $('Slack: post suggestion').all().map((it, i) => it.json.ok ? { json: { body: { slack_ts: it.json.ts, kind: 'engage', channel: 'C0000000001', thread_ts: it.json.ts, payload: sug[i].suggestion } } } : null).filter(Boolean);\n"
+      }
+    },
+    {
+      "id": "e28",
+      "name": "Helper: register suggestions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        4220,
+        220
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/proposals",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "e29",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4420,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nreturn [{ json: { ok: true, posted: $('Slack: post suggestion').all().filter(i => i.json.ok).map(i => i.json.ts), registered: $input.all().map(i => i.json) } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "10:40 and 17:20 IST": {
+      "main": [
+        [
+          {
+            "node": "Random jitter 0-20 min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random jitter 0-20 min": {
+      "main": [
+        [
+          {
+            "node": "Wait jitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait jitter": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (manual run)": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Helper: engage plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: engage plan": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Browser: read X targets (read-only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Browser: read X targets (read-only)": {
+      "main": [
+        [
+          {
+            "node": "Assess result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assess result": {
+      "main": [
+        [
+          {
+            "node": "Warning / captcha / login?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warning / captcha / login?": {
+      "main": [
+        [
+          {
+            "node": "Pause + report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Helper: filter seen posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause + report": {
+      "main": [
+        [
+          {
+            "node": "Helper: pause engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: pause engagement": {
+      "main": [
+        [
+          {
+            "node": "Report text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report text": {
+      "main": [
+        [
+          {
+            "node": "Slack: report pause",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: filter seen posts": {
+      "main": [
+        [
+          {
+            "node": "Helper: notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: notes": {
+      "main": [
+        [
+          {
+            "node": "LLM prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM prompt": {
+      "main": [
+        [
+          {
+            "node": "Draft comments (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft comments (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Parse + validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse + validate": {
+      "main": [
+        [
+          {
+            "node": "Helper: lint (reply-lint.py)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: lint (reply-lint.py)": {
+      "main": [
+        [
+          {
+            "node": "Suggestion messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suggestion messages": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: post suggestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: post suggestion": {
+      "main": [
+        [
+          {
+            "node": "Reaction buttons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reaction buttons": {
+      "main": [
+        [
+          {
+            "node": "Slack: add reactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: add reactions": {
+      "main": [
+        [
+          {
+            "node": "Register bodies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register bodies": {
+      "main": [
+        [
+          {
+            "node": "Helper: register suggestions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: register suggestions": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter model (drafter)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Draft comments (LLM)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800,
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

@@ -1,0 +1,1201 @@
+{
+  "id": "egzwmJyVfZ6uQiT1",
+  "name": "Client1 batches: hourly drafts (15 min check)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "b1",
+      "name": "Every 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b2",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        250
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            },
+            {
+              "name": "force_plan",
+              "type": "string"
+            },
+            {
+              "name": "now",
+              "type": "number"
+            },
+            {
+              "name": "ignore_timing",
+              "type": "boolean"
+            },
+            {
+              "name": "posts_json",
+              "type": "string"
+            },
+            {
+              "name": "targets_json",
+              "type": "string"
+            },
+            {
+              "name": "raw",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b3",
+      "name": "Start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Inputs: dry_run, force_plan (dry only), now (dry only), ignore_timing (dry only), posts_json (fake X search posts),\n// targets_json (fake text of client-chosen LinkedIn/Facebook posts), raw (fake LLM drafts JSON: skips the LLM). Schedule: all empty.\nconst j = $input.first().json || {};\nconst b = j.body || j;\nconst dry = b.dry_run === true || b.dry_run === 'true';\nconst J = s => { try { return s ? JSON.parse(s) : null; } catch (e) { return null; } };\nconst posts = dry ? (Array.isArray(b.posts) ? b.posts : J(b.posts_json)) : null;\nconst targets = dry ? (b.targets && typeof b.targets === 'object' ? b.targets : J(b.targets_json)) : null;\nconst raw = dry ? String(b.raw || '') : '';\nconst body = { dry_run: dry, force_plan: dry ? (b.force_plan || '') : '', ignore_timing: dry && (b.ignore_timing === true || b.ignore_timing === 'true') };\nif (dry && Number(b.now)) body.now = Number(b.now);\nreturn [{ json: { body, dry_run: dry, posts, targets, raw, fake: !!(posts || targets) } }];\n"
+      }
+    },
+    {
+      "id": "b4",
+      "name": "Helper: batch plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        440,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/batch/plan",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "b5",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// helper said wait / skip / still-there (the 'still there?' note is queued in the outbox; the poller posts it) -> stop quietly\nconst p = $json || {}, st = $('Start').first().json;\nif (!p.ok_to_run) return st.dry_run ? [{ json: { stop: true, dry_run: true, action: p.action || '', why_not: p.why_not || 'helper down', still_there: p.still_there || '', plan: p.plan_label } }] : [];\nconst reads = p.reads || [];\nif (!reads.length) return [{ json: { read: false, none: true } }];\nif (st.fake) return reads.map(r => ({ json: { read: false, spec: r } }));            // tests: fake posts / targets, no browser\nconst handle = 'your_x_handle';\nreturn reads.map(r => ({ json: { read: true, spec: r, task: (r.type === 'x_search' || r.type === 'x_watch' || r.type === 'x_following')\n  ? `Open ${r.url} . READ-ONLY task on X ${r.type === 'x_watch' ? 'watchlist (from:handles)' : r.type === 'x_following' ? 'Following/Home' : 'results'} (logged in as @${handle}; do not like, reply, follow, repost or click any button).\nWait for the posts to load. Use the extract action once to read the first 10 posts (scroll down once only if fewer than 6 are visible).\nFor each post get: url (its permalink https://x.com/<handle>/status/<id>, from the post's timestamp link), handle, text (full post text), age (e.g. 25m, 3h).\nSkip promoted/ad posts. Then call done with ONLY a JSON array of these posts and nothing else.`\n  : `Open ${r.url} . READ-ONLY: read this one ${r.platform === 'facebook' ? 'Facebook' : 'LinkedIn'} post. Do not like, react, comment, share, follow, connect or click any button.\nIf a sign-in page, captcha, security checkpoint, 'unusual activity' or any warning appears, STOP and call done with success=false and text starting 'STOPPED:'.\nOtherwise call done with ONLY this JSON: {\"author\": \"<name>\", \"text\": \"<the post text, max 800 characters>\"}` } }));\n"
+      }
+    },
+    {
+      "id": "b6",
+      "name": "Read?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b6c",
+              "leftValue": "={{ $json.read === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b7",
+      "name": "Browser: read-only read",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8770/task",
+        "options": {
+          "timeout": 660000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $json.task, max_steps: 12, allow_write: false }) }}"
+      }
+    },
+    {
+      "id": "b8",
+      "name": "Collect reads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// browser results (or fakes) -> reads for /batch/pick (the helper handles warning pages: platform pause / engagement pause)\nconst st = $('Start').first().json, plan = $('Helper: batch plan').first().json;\nconst gate = $('Gate').all().map(i => i.json), res = $input.all().map(i => i.json);\nconst reads = [];\ngate.forEach((g, i) => {\n  if (g.none || !g.spec) return;\n  const r = g.read ? (res[i] || {}) : null;\n  if (!g.read) {\n    if (g.spec.type === 'x_search' || g.spec.type === 'x_watch' || g.spec.type === 'x_following') reads.push({ ...g.spec, status: 'ok', posts: st.posts || [] });\n    else reads.push({ ...g.spec, status: (st.targets || {})[g.spec.url] ? 'ok' : 'error', data: (st.targets || {})[g.spec.url] || {} });\n    return;\n  }\n  reads.push({ ...g.spec, status: r.status || 'error', result_text: String(r.result_text || (r.error && (r.error.message || r.error)) || '').slice(0, 6000) });\n});\nreturn [{ json: { body: { ...st.body, alloc: plan.alloc, reads, batch_id: plan.batch_id } } }];\n"
+      }
+    },
+    {
+      "id": "b8s",
+      "name": "Stopped?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b8sc",
+              "leftValue": "={{ $json.stop === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b8r",
+      "name": "Stopped result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "b9",
+      "name": "Helper: batch pick",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1540,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/batch/pick",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "b10",
+      "name": "Pick gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst r = $json || {}, st = $('Start').first().json;\nif (!r.ok || r.nothing || r.stop) return st.dry_run ? [{ json: { stop: true, dry_run: true, why_not: r.why_not || r.error || 'nothing to draft', danger: !!r.stop } }] : [];\nreturn [{ json: { prompt: r.prompt, picks: r.picks, batch_id: r.batch_id, fake_raw: st.raw || '' } }];\n"
+      }
+    },
+    {
+      "id": "b10s",
+      "name": "Nothing to draft?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b10sc",
+              "leftValue": "={{ $json.stop === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b10r",
+      "name": "Nothing result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        260
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "b11",
+      "name": "Fake drafts (tests)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b11c",
+              "leftValue": "={{ !!$json.fake_raw }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b12",
+      "name": "Draft batch (LLM)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        2420,
+        180
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      }
+    },
+    {
+      "id": "b13",
+      "name": "OpenRouter model (batches)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        380
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "google/gemini-3.1-flash-lite"
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1500
+        }
+      }
+    },
+    {
+      "id": "b14",
+      "name": "Build body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst g = $('Pick gate').first().json, st = $('Start').first().json;\nconst raw = g.fake_raw || $json.text || $json.output || '';\nreturn [{ json: { body: { ...st.body, picks: g.picks, batch_id: g.batch_id, raw: String(raw) } } }];\n"
+      }
+    },
+    {
+      "id": "b15",
+      "name": "Helper: batch build",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2860,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/batch/build",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "b16",
+      "name": "Batch messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// dry run -> return everything as the result (never posted). Live -> the header goes first.\nconst r = $json || {}, st = $('Start').first().json;\nif (st.dry_run) return [{ json: { dry_run: true, batch_id: r.batch_id || '', n_items: r.n_items || 0, why_not: r.why_not || '', dropped: r.dropped || [],\n  progress: r.progress || '', header: r.header ? r.header.text : '', items: (r.items || []).map(i => ({ n: i.n, kind: i.kind, platform: i.platform, text: i.slack.text, payload: i.payload })),\n  posts: r.posts || [] } }];\nif (!r.ok || r.nothing || !r.header) return [];\nreturn [{ json: { slack: r.header, batch_id: r.batch_id } }];\n"
+      }
+    },
+    {
+      "id": "b17",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b17c",
+              "leftValue": "={{ $json.dry_run === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b18",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "b19",
+      "name": "Slack: batch header",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3520,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "b20",
+      "name": "Thread items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// header posted -> thread items (replies / comments). Posts are created by the propose-post tool further down.\nconst h = $json || {}, r = $('Helper: batch build').first().json;\nif (!h.ok || !h.ts) throw new Error('Slack header failed: ' + (h.error || 'unknown'));\nconst items = (r.items || []).map(i => ({ json: { n: i.n, header_ts: h.ts, slack: { ...i.slack, thread_ts: h.ts } } }));\nreturn items.length ? items : [{ json: { skip: true, header_ts: h.ts } }];\n"
+      }
+    },
+    {
+      "id": "b21",
+      "name": "Any thread items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b21c",
+              "leftValue": "={{ $json.skip !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b22",
+      "name": "Slack: batch item",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        4180,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "b23",
+      "name": "Item reactions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst posted = $input.all().map(i => i.json), out = [];\nposted.forEach(p => { if (!p.ok) return; for (const name of ['white_check_mark', 'pencil2', 'x']) out.push({ json: { body: { channel: p.channel, timestamp: p.ts, name } } }); });\nreturn out.length ? out : [{ json: { body: null } }];\n"
+      }
+    },
+    {
+      "id": "b24",
+      "name": "Slack: add reactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        4620,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/reactions.add",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "b25",
+      "name": "Post items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst r = $('Helper: batch build').first().json, hts = $('Slack: batch header').first().json.ts;\nconst posts = (r.posts || []).map(p => ({ json: { ...p, thread_ts: hts } }));\nreturn posts.length ? posts : [{ json: { skip: true } }];\n"
+      }
+    },
+    {
+      "id": "b26",
+      "name": "Any post items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "b26c",
+              "leftValue": "={{ $json.skip !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b27",
+      "name": "Propose batch post",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        5280,
+        -100
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "FBNBcOKeRVx0gMHw",
+          "mode": "id",
+          "cachedResultName": "Tool: Propose post (client1)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ $json.text }}",
+            "services": "={{ $json.services }}",
+            "when": "queue",
+            "channel": "C0000000001",
+            "thread_ts": "={{ $json.thread_ts }}",
+            "dry_run": false,
+            "label": "={{ $json.label }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "services",
+              "displayName": "services",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "when",
+              "displayName": "when",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "label",
+              "displayName": "label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      }
+    },
+    {
+      "id": "b28",
+      "name": "Register body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5500,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst r = $('Helper: batch build').first().json, hts = $('Slack: batch header').first().json.ts;\nlet posted = []; try { posted = $('Slack: batch item').all().map(i => i.json); } catch (e) { posted = []; }\nlet thread = []; try { thread = $('Thread items').all().map(i => i.json).filter(i => !i.skip); } catch (e) { thread = []; }\nconst items = (r.items || []).map(it => {\n  const k = thread.findIndex(x => x.n === it.n), p = k >= 0 ? posted[k] : null;\n  return { n: it.n, payload: it.payload, slack_ts: p && p.ok ? p.ts : '' };\n});\nlet props = []; try { props = $('Propose batch post').all().map(i => i.json); } catch (e) { props = []; }\nconst posts = (r.posts || []).map((po, i) => ({ n: po.n, preview_ts: (props[i] && props[i].preview_ts) || '' }));\nreturn [{ json: { body: { batch_id: r.batch_id, header_ts: hts, items, posts } } }];\n"
+      }
+    },
+    {
+      "id": "b29",
+      "name": "Helper: register batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        5720,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/batch/register",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 min": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Helper: batch plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: batch plan": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Stopped?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stopped?": {
+      "main": [
+        [
+          {
+            "node": "Stopped result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Read?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read?": {
+      "main": [
+        [
+          {
+            "node": "Browser: read-only read",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect reads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Browser: read-only read": {
+      "main": [
+        [
+          {
+            "node": "Collect reads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect reads": {
+      "main": [
+        [
+          {
+            "node": "Helper: batch pick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: batch pick": {
+      "main": [
+        [
+          {
+            "node": "Pick gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick gate": {
+      "main": [
+        [
+          {
+            "node": "Nothing to draft?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nothing to draft?": {
+      "main": [
+        [
+          {
+            "node": "Nothing result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fake drafts (tests)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fake drafts (tests)?": {
+      "main": [
+        [
+          {
+            "node": "Build body",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft batch (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft batch (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Build body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build body": {
+      "main": [
+        [
+          {
+            "node": "Helper: batch build",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: batch build": {
+      "main": [
+        [
+          {
+            "node": "Batch messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch messages": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: batch header",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: batch header": {
+      "main": [
+        [
+          {
+            "node": "Thread items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Thread items": {
+      "main": [
+        [
+          {
+            "node": "Any thread items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any thread items?": {
+      "main": [
+        [
+          {
+            "node": "Slack: batch item",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Post items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: batch item": {
+      "main": [
+        [
+          {
+            "node": "Item reactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Item reactions": {
+      "main": [
+        [
+          {
+            "node": "Slack: add reactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: add reactions": {
+      "main": [
+        [
+          {
+            "node": "Post items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post items": {
+      "main": [
+        [
+          {
+            "node": "Any post items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any post items?": {
+      "main": [
+        [
+          {
+            "node": "Propose batch post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Register body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Propose batch post": {
+      "main": [
+        [
+          {
+            "node": "Register body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register body": {
+      "main": [
+        [
+          {
+            "node": "Helper: register batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter model (batches)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Draft batch (LLM)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800,
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

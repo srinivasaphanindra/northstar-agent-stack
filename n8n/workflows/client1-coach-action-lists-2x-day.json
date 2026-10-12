@@ -1,0 +1,980 @@
+{
+  "id": "bsVhx7Sp3eHcvWsh",
+  "name": "Client1 coach: action lists (2x/day)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "c1",
+      "name": "Action list times (IST)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            },
+            {
+              "field": "cronExpression",
+              "expression": "30 18 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c2",
+      "name": "Random jitter 0-10 min",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { wait_s: Math.floor(Math.random() * 601), dry_run: false, source: 'schedule' } }];"
+      }
+    },
+    {
+      "id": "c3",
+      "name": "Wait jitter",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": "={{ $json.wait_s }}",
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "c4",
+      "name": "When called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "dry_run",
+              "type": "boolean"
+            },
+            {
+              "name": "slot",
+              "type": "string"
+            },
+            {
+              "name": "force_plan",
+              "type": "string"
+            },
+            {
+              "name": "posts_json",
+              "type": "string"
+            },
+            {
+              "name": "ignore_quiet",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c5",
+      "name": "Start",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Inputs: dry_run, slot ('am' | 'pm' | 'extra'), force_plan (dry runs only), posts_json (fake posts for tests: skips the browser read)\nconst j = $input.first().json || {};\nconst b = j.body || j;\nconst dry = b.dry_run === true || b.dry_run === 'true';\nlet posts = null;\ntry { if (b.posts_json) posts = JSON.parse(b.posts_json); } catch (e) { posts = null; }\nif (Array.isArray(b.posts)) posts = b.posts;\nconst body = { dry_run: dry, slot: b.slot || '', force_plan: dry ? (b.force_plan || '') : '', posts: posts || undefined,\n               ignore_quiet: dry && (b.ignore_quiet === true || b.ignore_quiet === 'true') };\nif (dry && b.now) body.now = Number(b.now);\nreturn [{ json: { body, dry_run: dry, posts, source: j.source || (j.body ? 'webhook' : 'subworkflow') } }];\n"
+      }
+    },
+    {
+      "id": "c6",
+      "name": "Helper: coach plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        820,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/coach/plan",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "c7",
+      "name": "Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Not running (not Viral, quiet hours, paused, budget): stop quietly (dry runs return the reason).\nconst p = $json || {}, st = $('Start').first().json;\nif (!p.ok_to_run) return st.dry_run ? [{ json: { stop: true, dry_run: true, why_not: p.why_not || 'helper down', plan: p.plan_label } }] : [];\nconst handle = (p.handles && p.handles.x) || 'your_x_handle';\nif (Array.isArray(st.posts)) return [{ json: { read: false, plan: p } }];          // fake posts (tests): no browser\nif (!(p.search_urls || []).length) return [{ json: { read: false, plan: p } }];    // nothing to read (budget used, or browser cap)\nreturn p.search_urls.map(u => ({ json: { read: true, plan: p, kind: u.kind, task: `Open ${u.url} . READ-ONLY light task on X (manual action-list only; logged in as @${handle}; do not like, reply, follow, repost or click any button).\nWait for posts to load. Extract the first 6 posts only (no second scroll).\nFor each: url (https://x.com/<handle>/status/<id>), handle, text (short), age. Skip ads. Call done with ONLY a JSON array.` } }));\n"
+      }
+    },
+    {
+      "id": "c8",
+      "name": "Read X?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c8c",
+              "leftValue": "={{ $json.read === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c9",
+      "name": "Browser: read X search (read-only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1420,
+        100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8770/task",
+        "options": {
+          "timeout": 660000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task: $json.task, max_steps: 8, allow_write: false }) }}"
+      }
+    },
+    {
+      "id": "c10",
+      "name": "Collect posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1620,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Gather posts from the read-only browser runs (or the fake posts). A warning / captcha / login page -> pause + report.\nconst st = $('Start').first().json, items = $input.all().map(i => i.json);\nconst plan = $('Helper: coach plan').first().json;\nlet posts = Array.isArray(st.posts) ? st.posts : [], danger = '';\nfor (const r of items) {\n  if (r.stop) return [{ json: r }];\n  if (r.read === false) continue;\n  const txt = String(r.result_text || (r.error && (r.error.message || r.error)) || '');\n  if (r.status === 'stopped' && !/read-only mode: refused/i.test(txt)) { danger = txt.slice(0, 400); break; }\n  const m = txt.match(/\\[[\\s\\S]*\\]/);\n  if (m) { try { const a = JSON.parse(m[0]); if (Array.isArray(a)) posts = posts.concat(a.slice(0, 12)); } catch (e) {} }\n}\nreturn [{ json: { danger: !!danger, reason: danger, posts: posts.slice(0, 20), plan, dry_run: st.dry_run } }];\n"
+      }
+    },
+    {
+      "id": "c11",
+      "name": "Warning / captcha / login?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c11c",
+              "leftValue": "={{ $json.danger === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c12",
+      "name": "Pause + report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $json;\nreturn [{ json: { body: { reason: 'auto: coach read-only X search stopped: ' + d.reason, by: 'coach', dry_run: d.dry_run },\n  slack: { channel: 'C0000000001', text: `:warning: While reading X search (read-only) for the action list, the browser hit a warning / login / captcha-type page:\\n> ${d.reason.slice(0, 300)}\\nI paused automated engagement and the warm-up drops one step. Nothing was clicked, and I skipped this action list. the owner can say 'resume engagement' once it looks fine in the app.` } } }];\n"
+      }
+    },
+    {
+      "id": "c13",
+      "name": "Helper: pause engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2220,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/engage/pause",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "c14",
+      "name": "Report text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const s = $('Pause + report').first().json; return s.body.dry_run ? [] : [{ json: { slack: s.slack } }];"
+      }
+    },
+    {
+      "id": "c15",
+      "name": "Slack: report pause",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2620,
+        40
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "c16",
+      "name": "Stopped?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2020,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c16c",
+              "leftValue": "={{ $json.stop === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c17",
+      "name": "Helper: notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2220,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:8771/context",
+        "options": {
+          "timeout": 8000
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ thread: 'coach', turns: 0 }) }}"
+      }
+    },
+    {
+      "id": "c18",
+      "name": "LLM prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Collect posts').first().json, plan = d.plan || {};\nconst notes = String(($('Helper: notes').first().json || {}).notes || '').slice(0, 1500);\nconst handle = (plan.handles && plan.handles.x) || 'your_x_handle';\nconst left = (plan.left || {}).x || {};\nconst posts = (d.posts || []).map(p => ({ url: p.url, handle: p.handle, text: String(p.text || '').slice(0, 400), age: p.age, replies: p.replies, likes: p.likes }));\nconst n = Math.max(1, Math.min(8, (left.replies || 0) + (left.quotes || 0), plan.size || 8));\nconst prompt = `You build a short \"action list\" of MANUAL tasks for the owner of the X account @${handle}. He does every task by hand in the app; nothing is automated.\nClient notes (voice, offer, things to avoid):\n${notes || '(none)'}\n\nTopic today: ${plan.topic}\nFresh X posts from a read-only search (JSON):\n${JSON.stringify(posts)}\n\nPick up to ${n} posts worth acting on NOW and give each exactly ONE kind:\n- \"reply_trend\": a fresh (under about 2h), busy post in the niche: reply with something specific.\n- \"creator_comment\": a post by a known creator from the last hour: an early, thoughtful reply.\n- \"quote\": at most 1, a strong post worth quoting with the client's own short take.\n- \"join_thread\": at most 1, a post with a live conversation (many replies): add a useful reply.\nSkip politics, religion, tragedies, controversy, crypto, giveaways, engagement bait, ads, sales pitches, anything off-topic or older than 6h.\nAt most one post per author.\nFor each pick write 2 DIFFERENT drafts in the client's voice: replies under 200 characters, quotes under 260; 1-2 short sentences; lowercase is fine;\nmention one concrete detail from the post; include a real question, or a small tip or personal experience.\nNever: links, hashtags, @mentions, emojis, em dashes, pitching, products or services, \"DM me\", generic praise (\"great post\"), invented numbers or results.\nAlso write 2 ready-to-adapt comment drafts for fresh LinkedIn posts about the topic (li_angles) and 2 for Facebook posts (fb_angles): same rules, each with a real question.\nReturn ONLY JSON, no prose:\n{\"tasks\":[{\"kind\":\"reply_trend|creator_comment|quote|join_thread\",\"url\":\"<exact url from the list>\",\"drafts\":[\"...\",\"...\"],\"why\":\"max 12 words\"}],\"li_angles\":[\"...\",\"...\"],\"fb_angles\":[\"...\",\"...\"]}`;\nreturn [{ json: { prompt } }];\n"
+      }
+    },
+    {
+      "id": "c19",
+      "name": "Draft action list (LLM)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        2620,
+        400
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}"
+      }
+    },
+    {
+      "id": "c20",
+      "name": "OpenRouter model (coach)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2620,
+        600
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "google/gemini-3.1-flash-lite"
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1400
+        }
+      }
+    },
+    {
+      "id": "c21",
+      "name": "Build body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2820,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Collect posts').first().json, st = $('Start').first().json;\nconst raw = $json.text || $json.response || JSON.stringify($json);\nreturn [{ json: { body: { ...st.body, posts: d.posts, raw } } }];\n"
+      }
+    },
+    {
+      "id": "c22",
+      "name": "Helper: build list (validate, cap, links)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3020,
+        400
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/coach/build",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "c23",
+      "name": "List messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3220,
+        400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// helper returns [header, task, task, ...]; dry run -> return them as the result, never post\nconst r = $json || {}, st = $('Start').first().json;\nif (st.dry_run) return [{ json: { dry_run: true, n_tasks: r.n_tasks || 0, why_not: r.why_not || '', dropped: r.dropped || [], list_id: r.list_id || '',\n  preview: (r.messages || []).map(m => m.slack.text) } }];\nif (!r.ok || !(r.messages || []).length) return [];\nreturn r.messages.map(m => ({ json: { type: m.type, task_id: m.task_id || null, list_id: r.list_id, slack: m.slack } }));\n"
+      }
+    },
+    {
+      "id": "c24",
+      "name": "Dry run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3420,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c24c",
+              "leftValue": "={{ $json.dry_run === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c25",
+      "name": "Dry-run result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3620,
+        520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    },
+    {
+      "id": "c26",
+      "name": "Slack: post list",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        3620,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "options": {
+          "timeout": 20000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.slack) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "c27",
+      "name": "Reaction buttons",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3820,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst posted = $input.all().map(i => i.json), msgs = $('List messages').all().map(i => i.json);\nconst out = [];\nposted.forEach((p, i) => {\n  if (!p.ok || !msgs[i] || msgs[i].type !== 'task') return;\n  for (const name of ['white_check_mark', 'black_right_pointing_double_triangle_with_vertical_bar'])\n    out.push({ json: { body: { channel: p.channel, timestamp: p.ts, name } } });\n});\nreturn out.length ? out : [{ json: { body: null } }];\n"
+      }
+    },
+    {
+      "id": "c28",
+      "name": "Slack: add reactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        4020,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/reactions.add",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "c29",
+      "name": "Register body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst posted = $('Slack: post list').all().map(i => i.json), msgs = $('List messages').all().map(i => i.json);\nconst tasks = []; let header_ts = '';\nposted.forEach((p, i) => {\n  const m = msgs[i]; if (!m || !p.ok) return;\n  if (m.type === 'header') header_ts = p.ts; else tasks.push({ task_id: m.task_id, slack_ts: p.ts });\n});\nreturn [{ json: { body: { list_id: msgs[0] ? msgs[0].list_id : '', header_ts, tasks } } }];\n"
+      }
+    },
+    {
+      "id": "c30",
+      "name": "Helper: register list",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        4420,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8771/coach/register",
+        "options": {
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      }
+    },
+    {
+      "id": "c31",
+      "name": "Stopped result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        220
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all();"
+      }
+    }
+  ],
+  "connections": {
+    "Action list times (IST)": {
+      "main": [
+        [
+          {
+            "node": "Random jitter 0-10 min",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random jitter 0-10 min": {
+      "main": [
+        [
+          {
+            "node": "Wait jitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait jitter": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When called": {
+      "main": [
+        [
+          {
+            "node": "Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Helper: coach plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: coach plan": {
+      "main": [
+        [
+          {
+            "node": "Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate": {
+      "main": [
+        [
+          {
+            "node": "Read X?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read X?": {
+      "main": [
+        [
+          {
+            "node": "Browser: read X search (read-only)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Browser: read X search (read-only)": {
+      "main": [
+        [
+          {
+            "node": "Collect posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect posts": {
+      "main": [
+        [
+          {
+            "node": "Warning / captcha / login?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Warning / captcha / login?": {
+      "main": [
+        [
+          {
+            "node": "Pause + report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stopped?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause + report": {
+      "main": [
+        [
+          {
+            "node": "Helper: pause engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: pause engagement": {
+      "main": [
+        [
+          {
+            "node": "Report text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report text": {
+      "main": [
+        [
+          {
+            "node": "Slack: report pause",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stopped?": {
+      "main": [
+        [
+          {
+            "node": "Stopped result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Helper: notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: notes": {
+      "main": [
+        [
+          {
+            "node": "LLM prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM prompt": {
+      "main": [
+        [
+          {
+            "node": "Draft action list (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft action list (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Build body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build body": {
+      "main": [
+        [
+          {
+            "node": "Helper: build list (validate, cap, links)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: build list (validate, cap, links)": {
+      "main": [
+        [
+          {
+            "node": "List messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List messages": {
+      "main": [
+        [
+          {
+            "node": "Dry run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dry run?": {
+      "main": [
+        [
+          {
+            "node": "Dry-run result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack: post list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: post list": {
+      "main": [
+        [
+          {
+            "node": "Reaction buttons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reaction buttons": {
+      "main": [
+        [
+          {
+            "node": "Slack: add reactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: add reactions": {
+      "main": [
+        [
+          {
+            "node": "Register body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register body": {
+      "main": [
+        [
+          {
+            "node": "Helper: register list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter model (coach)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Draft action list (LLM)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800,
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

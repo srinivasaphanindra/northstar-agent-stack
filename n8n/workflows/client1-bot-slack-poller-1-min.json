@@ -1,0 +1,602 @@
+{
+  "id": "TQcbInmRBisIIGRM",
+  "name": "Client1 bot: Slack poller (1 min)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "p1",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "p0",
+      "name": "Helper: tick",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "http://127.0.0.1:8771/tick",
+        "options": {
+          "timeout": 6000
+        }
+      }
+    },
+    {
+      "id": "p2",
+      "name": "Plan Slack reads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// This minute's Slack reads. No LLM here. Reads: channel history, replies in active/proposal threads,\n// reactions on pending bot proposals (post previews + engagement ideas, last 48 h, from client1-state).\nconst s = $getWorkflowStaticData('global');\nconst CH = 'C0000000001';\nconst now = Date.now() / 1000;\nconst tick = $('Helper: tick').first().json || {};\nconst pending = (tick.ok && Array.isArray(tick.pending)) ? tick.pending : [];\nif (!s.lastTs) s.lastTs = now.toFixed(6);\ns.threads = s.threads || {};\nfor (const [k, v] of Object.entries(s.threads)) if (now - v > 48 * 3600) delete s.threads[k];\nconst reqs = [{ kind: 'history', endpoint: 'conversations.history', qs: { channel: CH, oldest: s.lastTs, limit: 100, inclusive: false } }];\ns.onboard = s.onboard || {};\nfor (const [k, v] of Object.entries(s.onboard)) if (now - v > 7 * 86400) delete s.onboard[k];\nconst threads = Object.keys(s.onboard).slice(0, 4);\nfor (const k of Object.entries(s.threads).sort((a, b) => b[1] - a[1]).slice(0, 8).map(x => x[0])) if (!threads.includes(k)) threads.push(k);\nfor (const p of pending) if (p.thread_ts && !threads.includes(p.thread_ts)) threads.push(p.thread_ts);\nfor (const ts of threads.slice(0, 14)) reqs.push({ kind: 'replies', endpoint: 'conversations.replies', qs: { channel: CH, ts, oldest: s.lastTs, limit: 100, inclusive: false } });\nfor (const p of pending.slice(0, 20)) reqs.push({ kind: 'reactions', endpoint: 'reactions.get', qs: { channel: CH, timestamp: p.slack_ts, full: true } });\n// Viral plan: ✅ / ⏭ on action-list task messages (helper rotates which ones, max 10 a minute)\nfor (const ts of ((tick.ok && Array.isArray(tick.coach_open)) ? tick.coach_open : []).slice(0, 10))\n  reqs.push({ kind: 'coach_reactions', endpoint: 'reactions.get', qs: { channel: CH, timestamp: ts, full: true } });\nreturn reqs.map((r, i) => ({ json: { ...r, startTs: s.lastTs, tick: i === 0 ? tick : undefined } }));\n"
+      }
+    },
+    {
+      "id": "p3",
+      "name": "Slack: read",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://slack.com/api/' + $json.endpoint }}",
+        "options": {
+          "timeout": 20000
+        },
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.qs) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "p4",
+      "name": "Classify (messages, reactions, commands)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Turns Slack data into work items. Only the owner (U0000000001) can approve/discard/edit; bot reactions are ignored.\n// Each proposal message is acted on once per decision (static data 'acted'); client1-state enforces it again.\nconst s = $getWorkflowStaticData('global');\nconst BOT = 'U0000000002', OWNER = 'U0000000001', CH = 'C0000000001';\nconst plans = $('Plan Slack reads').all().map(i => i.json);\nconst tick = plans[0].tick || {};\nconst pending = (tick.ok && Array.isArray(tick.pending)) ? tick.pending : [];\nconst byTs = Object.fromEntries(pending.map(p => [p.slack_ts, p]));\nconst start = Number(plans[0].startTs);\nconst nowS = Date.now() / 1000;\ns.done = s.done || []; s.threads = s.threads || {}; s.acted = s.acted || {}; s.notified = s.notified || [];\nfor (const [k, v] of Object.entries(s.acted)) if (nowS - v > 72 * 3600) delete s.acted[k];\nconst APPROVE = new Set(['white_check_mark', 'heavy_check_mark', 'ballot_box_with_check']);\nconst EDIT = new Set(['pencil2', 'pencil', 'memo', 'writing_hand']);\nconst DISCARD = new Set(['x', 'negative_squared_cross_mark']);\nconst APPROVE_RE = /^(:white_check_mark:|:heavy_check_mark:|✅|approved?\\b|post it\\b|publish( it)?\\b|go ahead\\b|ship it\\b|yes,? (post|publish)|lgtm\\b|ok,? post)/;\nconst DISCARD_RE = /^(:x:|❌|discard\\b|cancel\\b|scrap it\\b|delete (it|the draft)\\b|don'?t post\\b|skip( it)?\\b)/;\nconst out = [];\nconst terminal = ts => s.acted[ts + ':approve'] || s.acted[ts + ':discard'];\nconst APPROVERS = new Set(Array.isArray(tick.approvers) && tick.approvers.length ? tick.approvers : [OWNER]);\nfunction batchDecide(ts, decision, eyes, user, withEyes) {\n  // one typed message can answer several batch items: keyed per item + typed message; only the first op carries the 👀 receipt\n  const key = ts + ':' + decision + ':' + eyes;\n  if (s.acted[ts + ':discard'] || s.acted[key]) return;\n  s.acted[key] = nowS; if (decision === 'discard') s.acted[ts + ':discard'] = nowS;\n  out.push({ json: { route: 'op', eyes: withEyes ? eyes : undefined, payload: JSON.stringify({ op: 'decide', slack_ts: ts, decision, by: user, now: false, source: 'typed', ts: withEyes ? eyes : undefined, channel: CH }) } });\n}\n// typed batch answers (mirrors batches.parse_batch_text in client1-state; tested there)\nconst B_OK = '(?:approve|ok|yes|✅|:white_check_mark:|:heavy_check_mark:)', B_NO = '(?:skip|discard|no|❌|:x:)';\nconst B_NUMS = '((?:\\\\d\\\\s*(?:,|and|&|\\\\s)\\\\s*)*\\\\d)';\nfunction parseBatch(text) {\n  const t = String(text || '').replace(/\\s+/g, ' ').trim(), low = t.toLowerCase();\n  let mm = t.match(/^(\\d)\\s*[:.)]\\s*(.{3,})$/);\n  if (mm) return { action: 'edit', nums: [Number(mm[1])], text: mm[2].trim() };\n  if (new RegExp('^(' + B_OK + '\\\\s+all|all\\\\s+' + B_OK + ')\\\\s*[!.]*$').test(low)) return { action: 'approve', nums: 'all' };\n  if (new RegExp('^(' + B_NO + '\\\\s+all|all\\\\s+' + B_NO + ')\\\\s*[!.]*$').test(low)) return { action: 'discard', nums: 'all' };\n  for (const [verb, act] of [[B_OK, 'approve'], [B_NO, 'discard']]) {\n    mm = low.match(new RegExp('^' + verb + '\\\\s*' + B_NUMS + '\\\\s*[!.]*$')) || low.match(new RegExp('^' + B_NUMS + '\\\\s*' + verb + '\\\\s*[!.]*$'));\n    if (mm) return { action: act, nums: [...new Set((mm[1].match(/\\d/g) || []).map(Number))].sort((a, b) => a - b) };\n  }\n  return null;\n}\n\nfunction decide(ts, decision, now, src, eyes) {\n  // Reactions act once per message. A TYPED 'approve' is keyed per typed message, so it can retry after a guardrail refusal\n  // (cap, pause, content check); the helper's atomic state change still prevents any double publish.\n  const key = ts + ':' + decision + (src === 'typed' ? ':' + eyes : '');\n  const blocked = src === 'typed' ? (s.acted[ts + ':discard'] || s.acted[key]) : (terminal(ts) || s.acted[key]);\n  if (blocked) { if (eyes) out.push({ json: { route: 'op', eyes, payload: JSON.stringify({ op: 'noop', ts: eyes, channel: CH, by: OWNER }) } }); return; }\n  s.acted[key] = nowS; if (decision === 'discard') s.acted[ts + ':discard'] = nowS;   // discard is final either way\n  out.push({ json: { route: 'op', eyes: eyes || undefined, payload: JSON.stringify({ op: 'decide', slack_ts: ts, decision, by: OWNER, now: !!now, source: src, ts: eyes || undefined, channel: CH }) } });\n}\nlet maxTs = start, histOk = false; const seen = new Map();\n$input.all().forEach((it, idx) => {\n  const r = it.json, p = plans[idx] || {};\n  if (p.kind === 'coach_reactions') {\n    // client's ✅ (done) / ⏭ (skipped) on a coach task; bot reactions are ignored; done wins; each state acted on once\n    if (!r || !r.ok) return;\n    const msg = r.message || {};\n    if (!(msg.bot_id || msg.user === BOT)) return;\n    const users = new Set(Array.isArray(tick.coach_users) && tick.coach_users.length ? tick.coach_users : [OWNER]);\n    const DONE = new Set(['white_check_mark', 'heavy_check_mark', 'ballot_box_with_check']);\n    const SKIP = new Set(['black_right_pointing_double_triangle_with_vertical_bar', 'next_track_button', 'track_next', 'fast_forward']);\n    const by = set => { for (const x of (msg.reactions || [])) { const n = String(x.name).replace(/::skin-tone-\\d$/, ''); if (set.has(n)) { const u = (x.users || []).find(u => users.has(u)); if (u) return u; } } return null; };\n    const ts = p.qs.timestamp, dU = by(DONE), sU = by(SKIP);\n    const state = dU ? 'done' : (sU ? 'skipped' : '');\n    if (state && !s.acted[ts + ':coach:' + state]) {\n      s.acted[ts + ':coach:' + state] = nowS;\n      out.push({ json: { route: 'op', payload: JSON.stringify({ op: 'coach_mark', slack_ts: ts, state, by: dU || sU, channel: CH }) } });\n    }\n    return;\n  }\n  if (p.kind === 'reactions') {\n    if (!r || !r.ok) return;\n    const ts = p.qs.timestamp, prop = byTs[ts];\n    if (!prop) return;\n    const msg = r.message || {};\n    if (!(msg.bot_id || msg.user === BOT)) return;                       // approvals only count on the bot's own messages\n    const mine = new Set(((r.message || {}).reactions || []).filter(x => (x.users || []).includes(OWNER)).map(x => String(x.name).replace(/::skin-tone-\\d$/, '')));\n    const has = set => [...mine].some(n => set.has(n));\n    if (has(DISCARD)) decide(ts, 'discard', false, 'reaction');            // ❌ wins if both are present (safe side)\n    else if (has(APPROVE)) decide(ts, 'approve', false, 'reaction');\n    else if (has(EDIT) && prop.state === 'pending' && (prop.kind === 'post' || prop.batch)) decide(ts, 'edit', false, 'reaction');\n    return;\n  }\n  if (!r || !r.ok) { if (p.kind === 'replies' && r && r.error === 'thread_not_found') delete s.threads[p.qs.ts]; return; }\n  if (p.kind === 'history') histOk = true;\n  for (const m of (r.messages || [])) { const ts = Number(m.ts); if (!(ts > start)) continue; if (ts > maxTs) maxTs = ts; seen.set(m.ts, m); }\n});\nif (histOk) s.lastTs = maxTs.toFixed(6);\nconst latestPending = th => pending.filter(p => p.thread_ts === th).sort((a, b) => Number(b.slack_ts) - Number(a.slack_ts))[0];\nfor (const m of [...seen.values()].sort((a, b) => Number(a.ts) - Number(b.ts))) {\n  if (m.bot_id || m.app_id || m.user === BOT || !m.user) continue;\n  if (m.subtype && m.subtype !== 'thread_broadcast' && m.subtype !== 'file_share') continue;\n  if (s.done.includes(m.ts)) continue;\n  const text = String(m.text || '').trim();\n  if (!text) continue;\n  const thread = m.thread_ts || m.ts;\n  s.threads[thread] = nowS; s.done.push(m.ts);\n  const t = text.replace(/<@[A-Z0-9]+>/g, '').trim(), low = t.toLowerCase();\n  const isOwner = m.user === OWNER;\n  const op = o => out.push({ json: { route: 'op', eyes: m.ts, payload: JSON.stringify({ ...o, by: m.user, channel: CH, thread_ts: thread, ts: m.ts }) } });\n  let mm;\n  s.onboard = s.onboard || {};\n  const ob = c => out.push({ json: { route: 'onboard', eyes: m.ts, client: 'client1', channel: CH, thread_ts: thread, ts: m.ts, user: m.user, text: text.slice(0, 3000), mode: c, dry_run: false } });\n  // Pasted passwords / keys: never routed to the LLM, onboarding or memory. The helper warns (or deletes if scopes allow) and tells the owner.\n  const SECRET = /(\\b(my |the |our )?(pass(word|wd|code)?|pwd|login pin|otp)\\b\\s*(is|=|:|-)\\s*\\S+|xox[abpers]-[A-Za-z0-9-]{8,}|\\bsk-[A-Za-z0-9_-]{16,}|\\bAKIA[0-9A-Z]{16}\\b|\\bgh[pousr]_[A-Za-z0-9]{20,}|\\b(api[_ -]?key|secret|token)\\b\\s*(is|=|:)\\s*\\S{8,})/i;\n  if (SECRET.test(t)) { op({ op: 'secret' }); continue; }\n  if (/^(pause|stop) (everything|all)\\b/.test(low)) { op({ op: 'pause_all', text: `<@${m.user}> said '${t.slice(0, 40)}' in #client1` }); continue; }\n  if (/^(resume|unpause|restart) (everything|all)\\b/.test(low)) { op({ op: 'resume_all' }); continue; }\n  if (/^(limits|usage|show (me )?(the )?limits|my limits)\\s*[?!.]*$/.test(low)) { op({ op: 'limits' }); continue; }\n  if (/^weekly report\\b/.test(low)) { op({ op: 'weekly_report' }); continue; }\n  if (/^(sign[- ]?in link|send (me )?a sign[- ]?in link)\\b/.test(low)) { op({ op: 'signin_request' }); continue; }\n  if (/^start onboarding\\b/.test(low)) { s.onboard[thread] = nowS; ob('start'); continue; }\n  if (s.onboard[thread] && /^(stop|cancel) onboarding\\b/.test(low)) { delete s.onboard[thread]; ob('cancel'); continue; }\n  if (s.onboard[thread] && m.thread_ts && m.thread_ts !== m.ts && !/^(remember\\s*[:\\-]|pause engagement|resume engagement)/.test(low)) { s.onboard[thread] = nowS; ob('answer'); continue; }\n  if (/^pause engagement\\b/.test(low)) { op({ op: 'pause', text: `<@${m.user}> said 'pause engagement' in #client1` }); continue; }\n  if (/^resume engagement\\b/.test(low)) { op({ op: 'resume' }); continue; }\n  if ((mm = t.match(/^remember\\s*[:\\-]\\s*([\\s\\S]+)/i))) { op({ op: 'remember', text: mm[1].trim() }); continue; }\n  if (/^engagement status\\b/.test(low)) { op({ op: 'engage_status' }); continue; }\n  // Viral plan / coach commands (the helper checks who may do what)\n  if ((mm = low.match(/^switch plan (?:to )?([a-z]+)\\b/))) { op({ op: 'switch_plan', plan: mm[1] }); continue; }\n  if (/^(action list|coach now|(send|give) (me )?(an |my |a new )?action list)\\s*(now|please)?\\s*[?!.]*$/.test(low)) { op({ op: 'coach_now' }); continue; }\n  if (/^shorter (action )?lists?\\b/.test(low)) { op({ op: 'coach_size', size: 'shorter' }); continue; }\n  if (/^(normal|longer) (action )?lists?\\b/.test(low)) { op({ op: 'coach_size', size: 'normal' }); continue; }\n  if ((mm = low.match(/^report (?:a )?warning (?:on |from )?(x|twitter|linkedin|facebook|fb)\\b/))) { op({ op: 'ramp_warning', platform: mm[1], text: t.slice(0, 300) }); continue; }\n  if (/^(my score|coach status|action list status)\\s*[?!.]*$/.test(low)) { op({ op: 'coach_status' }); continue; }\n  if (/^(suggest engagement|engagement now|engage now|find posts to engage)\\b/.test(low)) { op({ op: 'engage_now' }); continue; }\n\n  // Draft batches (2026-10-12): commands, and typed answers inside a batch thread ('1 ✅', 'approve 1, 3', '2 ❌', 'approve all', '3: new text')\n  if (/^watchlist\\s*[?!.]*$/.test(low)) { op({ op: 'watchlist' }); continue; }\n  if ((mm = low.match(/^watch\\s+@?([a-z0-9_]{1,15})\\b/))) { op({ op: 'watch', handle: mm[1], text: t.slice(0, 80) }); continue; }\n  if ((mm = low.match(/^unwatch\\s+@?([a-z0-9_]{1,15})\\b/))) { op({ op: 'unwatch', handle: mm[1], text: t.slice(0, 80) }); continue; }\n  if (/^(comment on|reply to)\\s+<?https?:\\/\\//i.test(t)) { op({ op: 'batch_target', text: t.slice(0, 700) }); continue; }\n  if (/^(next batch|new batch|(send|give) (me )?(a |the )?(next |new )?batch)( now| please)?\\s*[?!.]*$/.test(low)) { op({ op: 'batch_next' }); continue; }\n  if (/^(pause|stop) (the )?(draft )?batch(es)?\\b/.test(low)) { op({ op: 'batch_pause' }); continue; }\n  if (/^(resume|restart|start) (the )?(draft )?batch(es)?\\b/.test(low)) { op({ op: 'batch_resume' }); continue; }\n  if (/^(batch(es)? status|draft batch(es)?( status)?)\\s*[?!.]*$/.test(low)) { op({ op: 'batch_status' }); continue; }\n  const bmap = (m.thread_ts && m.thread_ts !== m.ts) ? ((tick.batches || {})[m.thread_ts] || null) : null;\n  if (bmap && APPROVERS.has(m.user)) {\n    const bc = parseBatch(t);\n    if (bc && bc.action === 'edit') { op({ op: 'batch_edit', n: bc.nums[0], text: bc.text.slice(0, 1500) }); continue; }\n    if (bc) {\n      const nums = bc.nums === 'all' ? Object.keys(bmap).map(Number).sort((a, b) => a - b) : bc.nums;\n      let first = true, any = false;\n      for (const n of nums) {\n        const it = bmap[String(n)];\n        if (!it || (bc.nums === 'all' && !['pending', 'editing'].includes(it.state))) continue;\n        any = true; batchDecide(it.ts, bc.action, m.ts, m.user, first); first = false;\n      }\n      if (!any) op({ op: 'batch_help' });\n      continue;\n    }\n    if (APPROVE_RE.test(low) || DISCARD_RE.test(low)) {\n      const open = Object.values(bmap).filter(it => it.state === 'pending');\n      if (open.length === 1) batchDecide(open[0].ts, APPROVE_RE.test(low) ? 'approve' : 'discard', m.ts, m.user, true);\n      else op({ op: 'batch_help' });\n      continue;\n    }\n  }\n  const prop = (m.thread_ts && m.thread_ts !== m.ts) ? latestPending(m.thread_ts) : null;\n  if (prop && isOwner && APPROVE_RE.test(low)) { decide(prop.slack_ts, 'approve', /\\bnow\\b/.test(low), 'typed', m.ts); continue; }\n  if (prop && isOwner && DISCARD_RE.test(low)) { decide(prop.slack_ts, 'discard', false, 'typed', m.ts); continue; }\n  const editingPost = (m.thread_ts && m.thread_ts !== m.ts) ? pending.find(p => p.thread_ts === m.thread_ts && p.kind === 'post' && p.state === 'editing') : null;\n  const context = (prop && prop.kind === 'post' && prop.state === 'editing') ? 'editing:' + prop.slack_ts : (editingPost ? 'editing:' + editingPost.slack_ts : '');\n  out.push({ json: { route: 'handler', eyes: m.ts, channel: CH, ts: m.ts, thread_ts: thread, user: m.user, text: text.slice(0, 4000), dry_run: false, announce: '', context } });\n}\nfor (const o of (tick.outbox || [])) {\n  if (s.notified.includes(o.id)) continue;\n  s.notified.push(o.id);\n  out.push({ json: { route: 'op', payload: JSON.stringify({ op: 'notify', id: o.id, channel: o.channel || CH, thread_ts: o.thread_ts || '', text: o.text }) } });\n}\ns.done = s.done.slice(-300); s.notified = s.notified.slice(-200);\nreturn out;   // empty -> run ends: no LLM call when idle\n"
+      }
+    },
+    {
+      "id": "p6",
+      "name": "Only chat messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        -100
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.route === 'handler');"
+      }
+    },
+    {
+      "id": "p7",
+      "name": "Only actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.route === 'op');"
+      }
+    },
+    {
+      "id": "p5",
+      "name": "Run Client1 bot (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1240,
+        -100
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "FFKpguli7WZX9cuz",
+          "mode": "id",
+          "cachedResultName": "Client1 bot"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "channel": "={{ $json.channel }}",
+            "ts": "={{ $json.ts }}",
+            "thread_ts": "={{ $json.thread_ts }}",
+            "user": "={{ $json.user }}",
+            "text": "={{ $json.text }}",
+            "dry_run": "={{ $json.dry_run }}",
+            "announce": "={{ $json.announce }}",
+            "context": "={{ $json.context }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "user",
+              "displayName": "user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            },
+            {
+              "id": "announce",
+              "displayName": "announce",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "context",
+              "displayName": "context",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    },
+    {
+      "id": "p9",
+      "name": "👀 read receipts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        -300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.eyes).map(i => ({ json: { body: { channel: 'C0000000001', timestamp: i.json.eyes, name: 'eyes' } } }));"
+      }
+    },
+    {
+      "id": "p10",
+      "name": "Slack: add 👀",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1240,
+        -300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/reactions.add",
+        "options": {
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi"
+      }
+    },
+    {
+      "id": "p11",
+      "name": "Only onboarding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return $input.all().filter(i => i.json.route === 'onboard');"
+      }
+    },
+    {
+      "id": "p12",
+      "name": "Run onboarding (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1240,
+        320
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "EWo4fdGhovm4OJFs",
+          "mode": "id",
+          "cachedResultName": "Client onboarding: chat interview (reusable)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "client": "={{ $json.client }}",
+            "channel": "={{ $json.channel }}",
+            "thread_ts": "={{ $json.thread_ts }}",
+            "ts": "={{ $json.ts }}",
+            "user": "={{ $json.user }}",
+            "text": "={{ $json.text }}",
+            "mode": "={{ $json.mode }}",
+            "dry_run": "={{ $json.dry_run }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "client",
+              "displayName": "client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "thread_ts",
+              "displayName": "thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "ts",
+              "displayName": "ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "user",
+              "displayName": "user",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "mode",
+              "displayName": "mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    },
+    {
+      "id": "p8",
+      "name": "Run actions (async)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1240,
+        120
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "value": "FbTdLU9H465W10Yd",
+          "mode": "id",
+          "cachedResultName": "Client1 bot: actions (approvals, commands, notify)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "payload": "={{ $json.payload }}",
+            "dry_run": false
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "dry_run",
+              "displayName": "dry_run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "boolean",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every minute": {
+      "main": [
+        [
+          {
+            "node": "Helper: tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Helper: tick": {
+      "main": [
+        [
+          {
+            "node": "Plan Slack reads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Slack reads": {
+      "main": [
+        [
+          {
+            "node": "Slack: read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: read": {
+      "main": [
+        [
+          {
+            "node": "Classify (messages, reactions, commands)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify (messages, reactions, commands)": {
+      "main": [
+        [
+          {
+            "node": "Only chat messages",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Only actions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "👀 read receipts",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Only onboarding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only chat messages": {
+      "main": [
+        [
+          {
+            "node": "Run Client1 bot (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only actions": {
+      "main": [
+        [
+          {
+            "node": "Run actions (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "👀 read receipts": {
+      "main": [
+        [
+          {
+            "node": "Slack: add 👀",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only onboarding": {
+      "main": [
+        [
+          {
+            "node": "Run onboarding (async)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "executionTimeout": 120,
+    "timezone": "Asia/Kolkata",
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
