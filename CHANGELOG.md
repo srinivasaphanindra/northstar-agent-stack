@@ -6,6 +6,21 @@ All notable changes to this project. Versions follow the Northstar app tags. Dat
 - Public docs: README, `docs/` pages, CONTRIBUTING, SECURITY, LICENSE (proprietary, all rights reserved), issue/PR templates, release notes.
 - Removed the internal ops log and business plan from `docs/`. Roadmap scrubbed.
 
+## v0.4.0 — 2026-10-12
+
+Local demo only: `PUBLISH_DRY_RUN=true`. No schema change.
+
+### Added
+- Clients collector reads the new client0 helper (`client0-state`, `CLIENT0_STATE_URL`, default 127.0.0.1:8772, GET `/health`, `/guard/limits`, `/engage/status`), client0's audit log and the n8n "Client0 bot" executions: client 0 now runs through Slack #client0 like client 1 (dry run).
+- Dry-run approvals (`publish_result dry_run`, `engage dry_run`) are a separate `dry_run` kind: shown as "dry-run approvals (not posted)", never counted as posts or replies.
+- A client's own helper AI meter takes precedence over the shared OpenRouter spend log.
+
+### Added (stack)
+- `clients/client0/`: template for running the owner's own accounts through Slack like client 1 (guardrails with placeholders, notes example, README: client0-state dry-run patch, n8n cloning rules, test round trip).
+
+### Tests
+- vitest 61/61 (new: client0 dry-run rows, helper spend precedence, client0 helper caps). Headless E2E not re-run (box overloaded, no new Chrome); unchanged pages.
+
 ## v0.3.0 — 2026-10-12
 
 Local demo only: `PUBLISH_DRY_RUN=true`. Existing databases need `npx prisma db push` (4 new tables).

@@ -38,7 +38,7 @@ export default async function ClientPage({ params, searchParams }: { params: Pro
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="card !p-4"><p className="label">Posts</p><p className="text-2xl font-extralight">{t.posts}</p></div>
+        <div className="card !p-4"><p className="label">Posts</p><p className="text-2xl font-extralight">{t.posts}</p>{t.dryRuns > 0 && <p className="text-xs muted">{t.dryRuns} dry-run approvals (not posted)</p>}</div>
         <div className="card !p-4"><p className="label">Replies</p><p className="text-2xl font-extralight">{t.replies}</p></div>
         <div className="card !p-4"><p className="label">Comments</p><p className="text-2xl font-extralight">{t.comments}</p></div>
         <div className="card !p-4"><p className="label">Inbound handled</p><p className="text-2xl font-extralight">{t.inbound}</p></div>

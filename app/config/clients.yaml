@@ -26,6 +26,10 @@ clients:
       followers_tsv: ${FOLLOWERS_TSV_PATH:-~/agency/state/followers.tsv}
       ai_spend_log: ${OR_SPEND_LOG_PATH:-~/agency/logs/or-spend.log}
       buffer_key_file: ${BUFFER_KEY_FILE:-~/agency/state/buffer-api.env}
+      # v0.4: client0 also runs through Slack #client0 like client 1 (client0-state helper, dry run)
+      state_helper_url: ${CLIENT0_STATE_URL:-http://127.0.0.1:8772}
+      audit_log: ${CLIENT0_AUDIT_LOG_PATH:-~/agency/clients/client0/audit-log.tsv}
+      n8n_inbound_workflow: "Client0 bot"
   - key: client1
     name: "Client 1"
     plan: viral

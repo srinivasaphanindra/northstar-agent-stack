@@ -24,10 +24,10 @@ export function perDay(rows: Row[], days: string[], platforms = ["x", "linkedin"
   return s;
 }
 
-export type Totals = { posts: number; replies: number; comments: number; approved: number; rejected: number; edited: number; inbound: number; impressions: number | null; failed: number };
+export type Totals = { dryRuns: number; posts: number; replies: number; comments: number; approved: number; rejected: number; edited: number; inbound: number; impressions: number | null; failed: number };
 export function totals(rows: Row[], days: string[]): Totals {
   const set = new Set(days);
-  const t: Totals = { posts: 0, replies: 0, comments: 0, approved: 0, rejected: 0, edited: 0, inbound: 0, impressions: null, failed: 0 };
+  const t: Totals = { dryRuns: 0, posts: 0, replies: 0, comments: 0, approved: 0, rejected: 0, edited: 0, inbound: 0, impressions: null, failed: 0 };
   for (const r of rows) {
     if (!set.has(r.day)) continue;
     const c = r.count ?? 1;
@@ -39,6 +39,7 @@ export function totals(rows: Row[], days: string[]): Totals {
     else if (r.kind === "edited") t.edited += c;
     else if (r.kind === "inbound") t.inbound += c;
     else if (r.kind === "publish_failed") t.failed += c;
+    else if (r.kind === "dry_run") t.dryRuns += c;
     if (typeof r.impressions === "number") t.impressions = (t.impressions ?? 0) + r.impressions;
   }
   return t;

@@ -1,0 +1,315 @@
+# Client 0 guardrails TEMPLATE: the owner's own X / LinkedIn / Facebook, run through a Slack channel (#client0)
+# exactly like client 1. Read by client0-state (default 127.0.0.1:8772). Copy to ~/agency/clients/client0/guardrails.yaml
+# and replace every placeholder (<...>, your_*, U0000000001).
+# DRY RUN: client0-state forces PUBLISH_DRY_RUN (C0_PUBLISH_DRY_RUN defaults to on); approvals are logged, nothing is sent
+# to Buffer / X / LinkedIn / Facebook.
+# Week-1 caps (Viral warm-up): X 4 posts + 8 replies/day; LinkedIn 4 posts/week + 2 comments/day;
+# Facebook 1 post + 3 comments/day. Everything needs ✅. No automated likes, follows or DMs. Replies only to watchlist /
+# followed accounts. Any platform warning: stop that platform and notify the owner.
+# Browser sessions: point the helper at your own signed-in Chrome profile / CDP endpoint only when you leave dry run.
+
+version: 5                       # 5 = new 1x/2x/3x tier caps + warm-up all tiers + X watchlist targets (the owner 2026-10-12 01:10 IST)
+client: "client0"
+plan: viral          # Viral, warm-up starts 2026-10-12, all actions approval-gated (client0 dry run)
+
+defaults:
+  platforms:                     # per IST day; engagement = replies/reposts the bot may perform (likes never automated)
+    x:
+      engage_per_day: 5          # trial defaults (tiers override with 1x/2x/3x)
+      posts_per_day: 3
+      posts_min_gap_minutes: 45  # posts at least 45 min apart (all tiers)
+    linkedin:
+      engage_per_day: 2
+      posts_per_day: 1
+      posts_per_week: 0          # 0 = no weekly ceiling; tiers set 4/8/12
+      comments_on: false         # approval-only automated comments (tiers turn on)
+      engage_min_gap_minutes: 20
+      engage_extra_gap_minutes: 10
+      engage_max_per_hour: 1     # LI/FB comments: max 1 an hour
+      warning_pause_days: 7
+    facebook:
+      engage_per_day: 3
+      posts_per_day: 1
+      comments_on: false
+      engage_min_gap_minutes: 20
+      engage_extra_gap_minutes: 10
+      engage_max_per_hour: 1
+      warning_pause_days: 7
+
+  engagement:
+    allowed_actions: [reply, like, repost]   # X actions; 'comment' = LinkedIn/Facebook comment (tiers add it)
+    never: [follow, unfollow, dm, mass_like, identical_comment, hashtag_spam]
+    min_gap_minutes: 8           # X replies: at least 8 min (+ random 0..extra)
+    extra_gap_minutes: 4
+    max_per_hour: 3              # X: max 3 replies an hour
+    duplicate_similarity: 0.85   # no identical / near-identical text
+    duplicate_lookback_days: 30
+    pause_on_warning: true       # any warning / captcha / lock pauses engagement
+
+  content:
+    regex_check: true            # free, runs on every proposed and every about-to-publish text
+    llm_check: true              # cheap classifier, runs ONLY on text about to be published
+    check_model: google/gemini-3.1-flash-lite
+    fail_closed: true            # if the classifier can't run, nothing is published
+    max_hashtags: 2
+    allow_politics: false        # client opt-in only
+    allow_religion: false        # client opt-in only
+    numbers_must_be_in_notes: true
+    post_duplicate_similarity: 0.9   # a post this close to one published on the same platform in 30 days is refused (no identical text)
+
+  approvals:
+    approvers: [U0000000001]     # Slack users whose ✅ counts
+    admins: [U0000000001]        # may say 'switch plan <name>'
+    auto_post_routine: false     # client opt-in: routine posts may skip ✅ (not built as a path yet)
+    always_need_approval: [reply, comment, dm, sensitive]
+
+  spend:
+    monthly_ai_budget_usd: 10
+    browser_tasks_per_month: 60
+    warn_pct: 80                 # in-channel warning
+    pause_nonessential_pct: 100  # engagement ideas + research browsing stop; chat and safety checks continue
+    hard_stop_pct: 150           # even chat answers with a fixed "budget used up" message
+    est_usd_per_m_input: 0.25    # used only when OpenRouter returns no cost
+    est_usd_per_m_output: 1.50
+
+  access:
+    browser_domains: [x.com, twitter.com, linkedin.com, facebook.com, buffer.com]
+    client_website: ""           # e.g. "example.com"; added to the browser allow-list
+    slack_can_delete_user_messages: false   # bot token has no scope to delete other people's messages
+
+  scope:
+    in_scope: "social media and online presence"
+    notify_owner: true
+    upsell_log: "~/agency/clients/client0/upsell-log.md"
+
+  audit:
+    log: "~/agency/clients/client0/audit-log.tsv"
+    resume_all_by: [U0000000001]
+
+  ramp:                          # warm-up ramp (off unless the tier turns it on)
+    enabled: false
+
+  coach:                         # manual-action coach (off unless the tier turns it on; Viral only for now)
+    enabled: false
+    platforms: [x, linkedin, facebook]
+    client_users: [U0000000001]  # whose ✅ (done) / ⏭ (skipped) count on action-list tasks
+    handles: {x: "your_x_handle", linkedin: "https://www.linkedin.com/in/your-linkedin-handle/", facebook: "https://www.facebook.com/your.facebook.profile/"}
+    creators: []                 # X handles (no @) to watch for 'comment in the first 30-60 min' tasks
+    topics: ["AI for small businesses", "founders in India", "social media marketing"]
+    list_times: ["09:00", "18:30"]   # IST; the n8n schedule uses these times (+0-10 min jitter)
+    tasks_per_list: {morning: 8, evening: 6}
+    quiet_hours: ["22:00", "08:00"]  # IST: no lists, nudges or celebrations in this window
+    max_nudges_per_day: 3        # reminders + 'completion is low' messages together
+    max_celebrations_per_day: 1
+    remind_before_minutes: 45    # remind this long before a time-sensitive task's window closes
+    windows_minutes: {reply_trend: 180, creator_comment: 60, quote: 360, join_thread: 120, answer_own: 360, li_comment: 120, fb_comment: 180}
+    low_completion_pct: 50       # below this for low_completion_days days -> one friendly note
+    low_completion_days: 2
+    streak_days: 3               # days in a row at >= streak_pct -> celebrate
+    streak_pct: 70
+    win_follower_jump_pct: 3     # follower jump vs the previous check -> celebrate
+    verify_platforms: [x]        # read-only check that a ✅ task really happened (LinkedIn/Facebook ban scraping: self-report only)
+    verify_per_day: 3            # browser tasks for checks, counted in browser_tasks_per_month
+
+  batches:                       # hourly approval batches in the client's Slack channel (off unless the tier turns them on)
+    enabled: false
+    live: false                  # master switch: false = only dry runs (nothing is posted to Slack)
+    start_at: ""                 # "YYYY-MM-DD HH:MM" IST: no live batch before this
+    active_hours: ["09:00", "21:00"]   # IST: batches and approved actions only inside this window
+    every_minutes: 60            # about once an hour (+ random 0..jitter_minutes)
+    jitter_minutes: 10
+    items_min: 2                 # a batch carries 2-4 ready drafts (posts, replies, comments with target links)
+    items_max: 4
+    max_posts_per_batch: 1
+    skip_after_ignored: 2        # no reaction to the last 2 batches -> skip (no spamming)
+    max_still_there_per_day: 1   # at most one gentle 'still there?' a day
+    item_ttl_hours: 6            # unanswered reply/comment items expire after this (posts keep 48 h)
+    x_reads_per_day: 4           # read-only X reads of watchlist/following for auto reply targets (NOT keyword search; each = 1 browser task)
+    read_targets: false          # never open a LinkedIn/Facebook post just to read it (their terms forbid scraping); the client adds a
+                                 # one-line gist with 'comment on <link> <what it says>'. true = one read-only open per batch.
+    post_platforms: [x, linkedin, facebook]
+
+tiers:
+  starter:                       # Starter Rs 4,999 (1x base). the owner 2026-10-12 01:10 IST.
+    label: "Starter"
+    platforms:
+      x:
+        engage_per_day: 10       # approved replies/reposts (no likes); each needs ✅
+        posts_per_day: 5         # via Buffer; min 45 min apart
+        posts_min_gap_minutes: 45
+      linkedin:                  # LinkedIn UA 8.2: approval-only comments; any warning -> 7 days at 0
+        engage_per_day: 2
+        comments_on: true
+        posts_per_week: 4        # weekly ceiling (not a daily blast)
+        posts_per_day: 1         # soft daily pace; weekly cap still enforced
+        posts_min_gap_minutes: 45
+        engage_min_gap_minutes: 20
+        engage_extra_gap_minutes: 10
+        engage_max_per_hour: 1
+        warning_pause_days: 7
+      facebook:
+        engage_per_day: 3
+        comments_on: true
+        posts_per_day: 1
+        posts_min_gap_minutes: 45
+        engage_min_gap_minutes: 20
+        engage_extra_gap_minutes: 10
+        engage_max_per_hour: 1
+        warning_pause_days: 7
+    engagement:
+      allowed_actions: [reply, repost, comment]   # no automated likes (X April 2026)
+      min_gap_minutes: 8         # X: >=8 min gaps, max 3 replies/hour
+      extra_gap_minutes: 4
+      max_per_hour: 3
+    ramp:                        # every tier: week 1 ~40%, then 60/80/100; drop 1 step on warning
+      enabled: true
+      step_days: 7
+      drop_steps_on_warning: 1
+      steps:
+        x: {engage_per_day: [4, 6, 8, 10], posts_per_day: [2, 3, 4, 5]}
+        linkedin: {engage_per_day: [1, 1, 2, 2], posts_per_day: [1, 1, 1, 1]}
+        facebook: {engage_per_day: [1, 2, 2, 3], posts_per_day: [1, 1, 1, 1]}
+      manual_pct: [40, 60, 80, 100]
+    batches:
+      enabled: true
+      every_minutes: 120         # about every 2 h, 2-4 items (covers ~15 browser actions/day)
+      items_min: 2
+      items_max: 4
+      x_reads_per_day: 2         # watchlist/Following reads only (not keyword search)
+    spend:
+      monthly_ai_budget_usd: 10
+      browser_tasks_per_month: 560   # ~15 actions/day * 31 * 1.2 (the owner 2026-10-12 01:10)
+  growth:                        # Growth Rs 14,999 = 2x Starter. + image creation / CRM / priority (setup on request).
+    label: "Growth"
+    platforms:
+      x:
+        engage_per_day: 20
+        posts_per_day: 10
+        posts_min_gap_minutes: 45
+      linkedin:
+        engage_per_day: 4
+        comments_on: true
+        posts_per_week: 8
+        posts_per_day: 2
+        posts_min_gap_minutes: 45
+        engage_max_per_hour: 1
+        warning_pause_days: 7
+      facebook:
+        engage_per_day: 6
+        comments_on: true
+        posts_per_day: 2
+        posts_min_gap_minutes: 45
+        engage_max_per_hour: 1
+        warning_pause_days: 7
+    engagement:
+      allowed_actions: [reply, repost, comment]
+      min_gap_minutes: 8
+      extra_gap_minutes: 4
+      max_per_hour: 3
+    ramp:
+      enabled: true
+      step_days: 7
+      drop_steps_on_warning: 1
+      steps:
+        x: {engage_per_day: [8, 12, 16, 20], posts_per_day: [4, 6, 8, 10]}
+        linkedin: {engage_per_day: [2, 2, 3, 4], posts_per_day: [1, 1, 2, 2]}
+        facebook: {engage_per_day: [2, 4, 5, 6], posts_per_day: [1, 1, 2, 2]}
+      manual_pct: [40, 60, 80, 100]
+    batches:
+      enabled: true
+      every_minutes: 60
+      items_min: 3
+      items_max: 5
+      x_reads_per_day: 3
+    spend:
+      monthly_ai_budget_usd: 20
+      browser_tasks_per_month: 1120  # ~30 actions/day * 31 * 1.2
+    extras:                      # listed on the website; not all wired into the client bot yet
+      image_creation: setup_on_request   # Grok Imagine in browser / xAI when credit exists
+      crm_integration: setup_on_request
+      priority_support: true
+  viral:                         # Viral Rs 24,999 = 3x Starter. Manual coach + extras.
+    label: "Viral"
+    platforms:
+      x:
+        engage_per_day: 30
+        posts_per_day: 15
+        posts_min_gap_minutes: 45
+      linkedin:
+        engage_per_day: 6
+        comments_on: true
+        posts_per_week: 12
+        posts_per_day: 2
+        posts_min_gap_minutes: 45
+        engage_max_per_hour: 1
+        warning_pause_days: 7
+      facebook:
+        engage_per_day: 9
+        comments_on: true
+        posts_per_day: 3
+        posts_min_gap_minutes: 45
+        engage_max_per_hour: 1
+        warning_pause_days: 7
+    engagement:
+      allowed_actions: [reply, repost, comment]
+      min_gap_minutes: 8
+      extra_gap_minutes: 4
+      max_per_hour: 3
+    ramp:
+      enabled: true
+      step_days: 7
+      start_date: "2026-10-12"   # standard 4-week warm-up (4 steps x 7 days)
+      drop_steps_on_warning: 1
+      steps:
+        x: {engage_per_day: [8, 15, 23, 30], posts_per_day: [4, 8, 11, 15]}    # client0: X 4+8 -> 15+30
+        linkedin: {engage_per_day: [2, 3, 5, 6], posts_per_day: [1, 1, 2, 2]}  # comments/day; posts_per_week below
+        facebook: {engage_per_day: [3, 5, 7, 9], posts_per_day: [1, 2, 2, 3]}
+      manual_pct: [40, 60, 80, 100]
+    manual_budget:
+      x: {replies: 27, quotes: 4, originals: 4, likes: 90, follows: 18, cold_dms: 0, per_hour: 8}
+      linkedin: {comments: 25, reshares: 2, likes: 90, invitations_per_week: 90, per_hour: 8}
+      facebook: {comments: 25, shares: 2, likes: 90, per_hour: 10}
+    coach:
+      enabled: true
+    batches:
+      enabled: true
+      every_minutes: 60
+      items_min: 4
+      items_max: 6
+      x_reads_per_day: 4
+    spend:
+      monthly_ai_budget_usd: 35  # kept; high-volume days may need BYO key — flagged in docs
+      browser_tasks_per_month: 1680  # ~45 actions/day * 31 * 1.2 (the owner 2026-10-12 01:10)
+    extras:
+      image_creation: setup_on_request
+      crm_integration: setup_on_request
+      priority_support: true
+
+overrides:
+  platforms:
+    linkedin:
+      posts_per_week: 4          # week 1 (Oct 12-18); then 6 / 9 / 12 (edit weekly; helper has no weekly ramp for this)
+  engagement:
+    allowed_actions: [reply, comment]   # no likes, follows, DMs, reposts automated
+    never: [like, follow, unfollow, dm, mass_like, identical_comment, hashtag_spam]
+    reply_targets: watchlist_or_followed  # replies only to watchlist or followed accounts
+    pause_on_warning: true
+  approvals:
+    auto_post_routine: false
+    always_need_approval: [post, reply, comment, dm, sensitive]   # nothing posts without ✅
+  content:
+    plain_text_only: true        # client0-state blocks drafts containing '<<<' or '>>>' (regex category not_plain_text)
+  warnings:
+    stop_and_notify: true        # any platform warning / checkpoint / captcha: stop that platform, notify the owner
+  inbound:                       # per 'Inbound auto-reply' in ~/agency/product/sales-strategy-india.md (2026-10-09), but
+    checks: hourly 08-23 IST     # here every reply is a ✅ draft in #client0 (approval-gated), never sent directly
+    real_people_only: true       # skip spam, bots, crypto/scam, abuse, political bait (flag block-worthy items)
+    never: [price_off_ladder, discounts, promises_of_results_or_dates, personal_info, links_except_wa_me_or_own_posts]
+    buying_signal: "reply warmly, ask for their page link, steer to WhatsApp (wa.me/<your-number> link), CRM as inbound, flag in Chief digest"
+    sensitive_or_unsure: flag_to_owner_no_reply
+    max_bot_replies_in_a_row: 2
+  batches:
+    enabled: false               # schedules stay off for client0 (the existing bots post meanwhile)
+    live: false
+  coach:
+    enabled: false

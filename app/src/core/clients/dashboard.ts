@@ -66,7 +66,9 @@ export async function clientDetail(user: { isPlatformAdmin?: boolean }, key: str
   const d30 = lastDays(today, 30);
   const rows = await rowsFor(c.key, d30[0]);
   const plan = cfg.plans[c.plan];
-  const spend = (await latestMetric(c.key, "all", "ai_spend_usd"))?.value ?? null;
+  // the client's own helper meter wins over the shared OpenRouter spend log when both exist
+  const spend = (await db.clientMetric.findFirst({ where: { clientKey: c.key, platform: "all", metric: "ai_spend_usd", source: "state_helper" }, orderBy: [{ day: "desc" }, { updatedAt: "desc" }] }))?.value
+    ?? (await latestMetric(c.key, "all", "ai_spend_usd"))?.value ?? null;
   const budget = (await latestMetric(c.key, "all", "ai_budget_usd"))?.value ?? plan?.ai_budget_usd_month ?? 35;
   const imps = await db.clientMetric.findMany({ where: { clientKey: c.key, metric: "impressions", day: { gte: d30[0] } } });
   const sumImp = (days: string[]) => { const s = new Set(days); const v = imps.filter((m) => s.has(m.day)); return v.length ? v.reduce((a, m) => a + m.value, 0) : null; };

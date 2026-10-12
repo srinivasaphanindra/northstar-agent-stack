@@ -11,7 +11,7 @@
 ![n8n](https://img.shields.io/badge/n8n-2.42-EA4B71?logo=n8n)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 
-[Quick start](#quick-start) · [Features](#what-works-in-v030) · [Architecture](docs/architecture.md) · [Guardrails](docs/guardrails.md) · [Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Features](#what-works-in-v040) · [Architecture](docs/architecture.md) · [Guardrails](docs/guardrails.md) · [Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -46,7 +46,7 @@ The screenshots come from the local demo and use demo data only. The guardrail n
 workspace's settings, not the plan caps.
 </details>
 
-## What works in v0.3.0
+## What works in v0.4.0
 
 **Northstar app** (`app/`, Next.js 15 + Prisma, web + worker)
 - Mobile-first installable PWA. Email + password auth, invites with owner/admin/member roles, multi-tenant workspaces and an append-only audit log.
@@ -63,9 +63,10 @@ workspace's settings, not the plan caps.
 **Client 1 stack** (the production pilot, run on n8n)
 - 14 n8n workflows (exported **inactive**, with no credentials): Slack poller, bot, approvals/commands, hourly approval batches, Viral coach, X engagement drafter, Buffer post tool, browser task tool, onboarding interview.
 - `client1-state`: a stdlib-only Python helper for memory, guardrails, approvals, batches and the coach, with offline tests.
+- Client 0 template (`clients/client0/`, v0.4): run your own accounts through Slack like client 1, dry run (approvals logged, nothing published).
 - `browser-agent`: a browser-use HTTP service for read-only browsing tasks, with a domain allow-list and metered spend.
 
-**Tests:** 60 vitest tests, typecheck clean, headless E2E 19/19, plus the `client1-state` offline tests.
+**Tests:** 61 vitest tests, typecheck clean, headless E2E 19/19 (v0.3.0), plus the `client1-state` offline tests.
 
 **Not yet done:** see [app/STATUS.md](app/STATUS.md) and the [roadmap](docs/roadmap.md). Tier caps in the app, real Slack/Buffer runs, web push/email, Postgres and the VPS move are all still to come.
 

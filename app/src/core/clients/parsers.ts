@@ -2,7 +2,7 @@
 // Every parser tolerates junk lines and returns [] / null rather than throwing.
 
 export type Platform = "x" | "linkedin" | "facebook" | "other";
-export type Kind = "post" | "reply" | "comment" | "inbound" | "approved" | "rejected" | "edited" | "publish_failed" | "note";
+export type Kind = "post" | "reply" | "comment" | "inbound" | "approved" | "rejected" | "edited" | "publish_failed" | "dry_run" | "note";
 export type Activity = {
   platform: Platform; kind: Kind; occurredAt: Date; url: string; detail: string;
   count: number; impressions?: number | null; source: string; sourceKey: string;
@@ -103,8 +103,12 @@ export function parseClientAudit(text: string): Activity[] {
       const p = url ? platformOfUrl(url) : "x";
       out.push({ ...base, platform: p, kind: p === "x" ? "reply" : kind === "reply" ? "comment" : kind, detail: detail.slice(0, 200) });
     } else if (event === "publish_result") {
-      const p = /twitter|^x:/i.test(detail) ? "x" : /linkedin/i.test(detail) ? "linkedin" : /facebook/i.test(detail) ? "facebook" : "other";
-      out.push({ ...base, platform: p, kind: /fail|error/i.test(outcome) ? "publish_failed" : "post", detail: `${outcome} ${detail}`.trim().slice(0, 200) });
+      const p = /twitter|^x:|\b(?:addToQueue|shareNow) x\b/i.test(detail) ? "x" : /linkedin/i.test(detail) ? "linkedin" : /facebook/i.test(detail) ? "facebook" : "other";
+      const kind: Kind = /dry.?run/i.test(outcome) ? "dry_run" : /fail|error/i.test(outcome) ? "publish_failed" : "post";
+      out.push({ ...base, platform: p, kind, detail: `${outcome} ${detail}`.trim().slice(0, 200) });
+    } else if (event === "engage" && /dry.?run/i.test(outcome)) {
+      const p = url ? platformOfUrl(url) : "x";
+      out.push({ ...base, platform: p, kind: "dry_run", detail: `engage ${detail}`.slice(0, 200) });
     }
   }
   return out;

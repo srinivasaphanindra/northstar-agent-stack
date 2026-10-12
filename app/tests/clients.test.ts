@@ -71,6 +71,18 @@ describe("parsers", () => {
     expect(a.map((x) => `${x.platform}:${x.kind}`)).toEqual(["other:approved", "other:rejected", "other:edited", "x:reply", "x:publish_failed"]);
     expect(a.some((x) => x.detail.includes("U0000000001"))).toBe(false);
   });
+  it("client0 dry-run rows are not counted as posts", () => {
+    const t = [
+      "ts_ist\tevent\tby\tref\toutcome\tdetail",
+      "2026-10-12 17:40:40\tpublish\tU0000000001\t1.5\tissued\taddToQueue x",
+      "2026-10-12 17:40:40\tpublish_result\tclient0-state\t1.5\tdry_run\tPUBLISH_DRY_RUN: addToQueue x; nothing sent to Buffer/X/LinkedIn/Facebook",
+      "2026-10-12 17:41:00\tengage\tU0000000001\t1.6\tdry_run\treply https://x.com/a/status/9; nothing queued or sent",
+    ].join("\n");
+    const a = parseClientAudit(t);
+    expect(a.map((x) => `${x.platform}:${x.kind}`)).toEqual(["x:dry_run", "x:dry_run"]);
+    const rows = a.map((x) => ({ platform: x.platform, kind: x.kind, day: istDay(x.occurredAt), count: 1 }));
+    expect(totals(rows, ["2026-10-12"])).toMatchObject({ posts: 0, replies: 0, dryRuns: 2 });
+  });
   it("followers, spend log, helper summary, profiles", () => {
     expect(parseFollowers("date\ttime\tx\tfacebook\tlinkedin\tyoutube\n2026-10-08\t15:30\tnot visible\tnot visible\t\t\n2026-10-08\t23:45\t112\tnot visible\t1,204\t")).toEqual([
       { day: "2026-10-08", platform: "x", value: 112 }, { day: "2026-10-08", platform: "linkedin", value: 1204 },
@@ -175,6 +187,7 @@ describe("collector + admin-only access", () => {
     w("followers.tsv", "date\ttime\tx\tfacebook\tlinkedin\tyoutube\n2026-10-11\t10:00\t100\t\t\t\n2026-10-12\t10:00\t112\t\t\t\n");
     w("g.yaml", 'coach:\n  handles: {x: "c1x", linkedin: "c1li", facebook: "C1 Page"}\n');
     w("audit.tsv", "ts_ist\tevent\tby\tref\toutcome\tdetail\n2026-10-12 10:26:35\tdecide\tU1\t1.1\tapprove\tengage\n2026-10-12 10:28:28\tengage_run\tworker\t1.1\tdone\treply https://x.com/b/status/7\n");
+    w("spend.log", "OpenRouter spend: today $1.00, this week $2.00, Hermes key total $20.30 of $50 limit.\n");
     w("n8n.env", "N8N_URL=http://n8n.test\nN8N_API_KEY=test-key\n");
     const repo = fs.readFileSync(REPO_CFG, "utf8").split("\nclients:")[0];
     cfgFile = path.join(dir, "clients.yaml");
@@ -192,8 +205,9 @@ clients:
       sync_log: ${dir}/sync.md
       sync_log_bots: { "LinkedIn Bot": linkedin }
       followers_tsv: ${dir}/followers.tsv
-      ai_spend_log: ${dir}/nope.log
+      ai_spend_log: ${dir}/spend.log
       buffer_key_file: ${dir}/no-buffer.env
+      state_helper_url: http://helper0.test
   - key: client1
     name: "Client 1"
     plan: viral
@@ -212,7 +226,9 @@ clients:
     const url = String(input);
     calls.push({ url, method: init?.method ?? "GET" });
     const j = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
-    if (url === "http://helper.test/health") return j({ ok: true });
+    if (url === "http://helper.test/health" || url === "http://helper0.test/health") return j({ ok: true });
+    if (url === "http://helper0.test/guard/limits") return j({ summary: "X: replies 2/8, posts 0/4", spend: { spent: 0.5, budget: 35 } });
+    if (url === "http://helper0.test/engage/status") return j({ approved_today: 0, cap: 8 });
     if (url === "http://helper.test/guard/limits") return j({ summary: "X: replies 3/12, posts 0/6; LinkedIn: approval-only comments 0/2, posts 0/1", spend: { spent: 0.15, budget: 35 } });
     if (url === "http://helper.test/engage/status") return j({ approved_today: 1, cap: 12 });
     if (url.startsWith("http://n8n.test/api/v1/workflows")) return j({ data: [{ id: "wf1", name: "Client1 bot" }] });
@@ -254,7 +270,6 @@ clients:
     const o = await clientsOverview(admin, now);
     const c0x = o.clients.find((c) => c.key === "client0")!.caps.find((p) => p.platform === "x")!;
     expect(c0x.posts.label).toBe("1/4");
-    expect(c0x.replies!.label).toBe("1/8");
     const c1x = o.clients.find((c) => c.key === "client1")!.caps.find((p) => p.platform === "x")!;
     expect(c1x.replies!.label).toBe("3/8"); // helper count (3) beats the audit log (1)
     const d = await clientDetail(admin, "client1", now);
@@ -262,7 +277,8 @@ clients:
     expect(d.t7).toMatchObject({ approved: 1, inbound: 1, replies: 1 });
     const d0 = await clientDetail(admin, "client0", now);
     expect(d0.followers.map((f) => f.value)).toEqual([100, 112]);
-    expect(d0.spend.spent).toBeNull();
+    expect(d0.spend.spent).toBe(0.5); // client0's own helper meter beats the shared spend log ($20.30)
+    expect(c0x.replies!.label).toBe("2/8"); // helper count (2) beats the ledger (1)
     expect(d0.series7.linkedin.post[6]).toBe(1);
   });
 });
