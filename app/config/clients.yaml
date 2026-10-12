@@ -1,0 +1,37 @@
+# Admin "Clients" dashboard (v0.3). Product numbers live here; personal handles/URLs do NOT.
+# Handles are read at collect time from the configured source files (brand yaml, landing page, client guardrails).
+# Every path may start with ~ and can be overridden by env (see .env.example). Missing files are skipped.
+plans:
+  viral:
+    ai_budget_usd_month: 35
+    warmup_weeks: 4
+    # index = warm-up week (0..3); the last value holds after the warm-up
+    caps:
+      x:        { posts_per_day: [4, 8, 11, 15], replies_per_day: [8, 15, 23, 30] }
+      linkedin: { posts_per_week: [4, 6, 9, 12], comments_per_day: [2, 3, 5, 6] }
+      facebook: { posts_per_day: [1, 2, 2, 3], comments_per_day: [3, 5, 7, 9] }
+
+clients:
+  - key: client0
+    name: "Client 0 (own accounts)"
+    plan: viral
+    start_date: "2026-10-12"
+    sources:
+      brand_yaml: ${BRAND_YAML_PATH:-~/agency/brain/brand.yaml}
+      landing_html: ${LANDING_HTML_PATH:-~/agency/public/northstar-landing/index.html}
+      x_ledger: ${X_POST_LEDGER_PATH:-~/agency/state/x-post-ledger.tsv}
+      x_inbound: ${X_INBOUND_LOG_PATH:-~/agency/state/x-inbound-log.tsv}
+      sync_log: ${SYNC_LOG_PATH:-~/agency/brain/sync-log.md}
+      sync_log_bots: { "X Bot": x, "LinkedIn Bot": linkedin, "Facebook Bot": facebook }
+      followers_tsv: ${FOLLOWERS_TSV_PATH:-~/agency/state/followers.tsv}
+      ai_spend_log: ${OR_SPEND_LOG_PATH:-~/agency/logs/or-spend.log}
+      buffer_key_file: ${BUFFER_KEY_FILE:-~/agency/state/buffer-api.env}
+  - key: client1
+    name: "Client 1"
+    plan: viral
+    start_date: "2026-10-12"
+    sources:
+      guardrails_yaml: ${CLIENT1_GUARDRAILS_PATH:-~/agency/clients/client1/guardrails.yaml}
+      audit_log: ${CLIENT1_AUDIT_LOG_PATH:-~/agency/clients/client1/audit-log.tsv}
+      state_helper_url: ${CLIENT1_STATE_URL:-http://127.0.0.1:8771}
+      n8n_inbound_workflow: "Client1 bot"

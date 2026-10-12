@@ -4,7 +4,7 @@ import { createWorkspace, requireMember } from "@/core/tenancy";
 
 export async function resetDb() {
   // children first
-  for (const t of ["message", "conversation", "draft", "job", "usageEvent", "invoice", "auditLog", "integration", "guardrailSettings", "brainNote", "onboardingSession", "channelBinding", "invite", "member", "session", "workspace", "user"] as const) {
+  for (const t of ["message", "conversation", "draft", "job", "usageEvent", "invoice", "auditLog", "integration", "guardrailSettings", "brainNote", "onboardingSession", "channelBinding", "invite", "member", "session", "workspace", "user", "clientActivity", "clientMetric", "clientProfile", "collectorRun"] as const) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (db as any)[t].deleteMany({});
   }

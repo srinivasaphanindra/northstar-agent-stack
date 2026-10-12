@@ -9,6 +9,7 @@ import { deliverReply, notifyDraft } from "../src/core/channels";
 import { pollTelegramOnce } from "../src/core/channels/telegram";
 import { pollSlackOnce } from "../src/core/channels/slack";
 import { safeJson } from "../src/core/integrations";
+import { collectAll } from "../src/core/clients/collector";
 
 let stopping = false;
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), "[worker]", ...a);
@@ -76,7 +77,16 @@ async function main() {
   process.on("SIGTERM", () => { stopping = true; });
   process.on("SIGINT", () => { stopping = true; });
   const scan = async () => { while (!stopping) { await channelScan().catch((e) => log("scan", e.message)); await new Promise((r) => setTimeout(r, 10_000)); } };
-  await Promise.all([jobLoop(), process.env.WORKER_CHANNELS === "0" || !config.channelsEnabled ? Promise.resolve() : scan()]);
+  // v0.3: read-only Clients collector every 15 min (CLIENTS_COLLECTOR=false to disable)
+  const collect = async () => {
+    if (process.env.CLIENTS_COLLECTOR === "false") return;
+    const every = Math.max(60, Number(process.env.CLIENTS_COLLECT_SECONDS || 900)) * 1000;
+    while (!stopping) {
+      await collectAll().then(() => log("clients collected")).catch((e) => log("collector", e instanceof Error ? e.message : e));
+      for (let t = 0; t < every && !stopping; t += 5000) await new Promise((r) => setTimeout(r, 5000));
+    }
+  };
+  await Promise.all([jobLoop(), collect(), process.env.WORKER_CHANNELS === "0" || !config.channelsEnabled ? Promise.resolve() : scan()]);
   await db.$disconnect();
   log("stopped");
 }

@@ -245,3 +245,55 @@ model AuditLog {
 
   @@index([workspaceId, createdAt])
 }
+
+// ---- v0.3 admin Clients dashboard (filled by the read-only collector, src/core/clients/collector.ts) ----
+model ClientProfile {
+  id        String   @id @default(cuid())
+  clientKey String
+  platform  String   // x | linkedin | facebook | website
+  handle    String   @default("")
+  url       String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientKey, platform])
+}
+
+model ClientActivity {
+  id          String   @id @default(cuid())
+  clientKey   String
+  platform    String   // x | linkedin | facebook | other
+  kind        String   // post | reply | comment | inbound | approved | rejected | edited | publish_failed | note
+  occurredAt  DateTime
+  day         String   // YYYY-MM-DD in IST
+  url         String   @default("")
+  detail      String   @default("")
+  count       Int      @default(1) // e.g. replies sent in one inbound check
+  impressions Int?
+  source      String   // x_ledger | x_inbound | sync_log | audit_log | buffer | n8n
+  sourceKey   String
+  createdAt   DateTime @default(now())
+
+  @@unique([source, sourceKey])
+  @@index([clientKey, day])
+}
+
+model ClientMetric {
+  id        String   @id @default(cuid())
+  clientKey String
+  platform  String   // x | linkedin | facebook | all
+  metric    String   // followers | ai_spend_usd | ai_budget_usd | helper_posts | helper_replies | helper_comments
+  day       String   // YYYY-MM-DD in IST
+  value     Float
+  source    String
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientKey, platform, metric, day, source])
+}
+
+model CollectorRun {
+  id         String    @id @default(cuid())
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  notes      String    @default("") // JSON: per-source result
+}

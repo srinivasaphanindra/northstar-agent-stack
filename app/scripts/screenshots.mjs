@@ -111,6 +111,32 @@ const WSNAME = `Chai Corner (test ${String(Date.now()).slice(-5)})`;
   check("PWA manifest served", manifest.ok() && (await manifest.json()).display === "standalone");
   const sw = await page.request.get(`${BASE}/sw.js`);
   check("service worker served", sw.ok());
+  // v0.3: the Clients dashboard is admin-only
+  const nc = await page.goto(`${BASE}/admin/clients`);
+  check("non-admin gets 404 on /admin/clients", nc?.status() === 404);
+  const nd = await page.goto(`${BASE}/admin/clients/client0`);
+  check("non-admin gets 404 on a client page", nd?.status() === 404);
+  await ctx.close();
+}
+
+// ---------- mobile, admin Clients dashboard (v0.3). Screens go to /tmp: they show real profile handles. ----------
+{
+  const PRIV = process.env.PRIVATE_SCREENS_DIR ?? "/tmp/northstar-private-screens/";
+  fs.mkdirSync(PRIV, { recursive: true });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  await login(page, process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD);
+  const r1 = await page.goto(`${BASE}/admin/clients`);
+  check("admin sees /admin/clients", r1?.ok() && await page.isVisible("[data-testid=client-client0]") && await page.isVisible("[data-testid=client-client1]"));
+  check("clients show caps", (await page.locator("[role=meter]").count()) >= 6);
+  await page.screenshot({ path: `${PRIV}20-clients-mobile.png`, fullPage: true });
+  await page.click("[data-testid=client-client1]"); await page.waitForURL(/\/admin\/clients\/client1/);
+  check("client analytics page renders", await page.isVisible("text=Recent activity") && await page.isVisible("text=AI spend (month)"));
+  await page.click("text=30 days"); await page.waitForURL(/range=30/);
+  check("30-day range works", await page.isVisible("text=Per day, last 30 days"));
+  await page.screenshot({ path: `${PRIV}21-client-analytics-mobile.png`, fullPage: true });
+  const noBottomScroll = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+  check("no horizontal scroll on mobile", noBottomScroll);
   await ctx.close();
 }
 await browser.close();

@@ -11,7 +11,7 @@
 ![n8n](https://img.shields.io/badge/n8n-2.42-EA4B71?logo=n8n)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 
-[Quick start](#quick-start) · [Features](#what-works-in-v020) · [Architecture](docs/architecture.md) · [Guardrails](docs/guardrails.md) · [Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Features](#what-works-in-v030) · [Architecture](docs/architecture.md) · [Guardrails](docs/guardrails.md) · [Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md)
 
 </div>
 
@@ -46,7 +46,7 @@ The screenshots come from the local demo and use demo data only. The guardrail n
 workspace's settings, not the plan caps.
 </details>
 
-## What works in v0.2.0
+## What works in v0.3.0
 
 **Northstar app** (`app/`, Next.js 15 + Prisma, web + worker)
 - Mobile-first installable PWA. Email + password auth, invites with owner/admin/member roles, multi-tenant workspaces and an append-only audit log.
@@ -58,13 +58,14 @@ workspace's settings, not the plan caps.
 - Guardrails page (kill switch, daily caps, content rules, AI budget), per-workspace spend caps (80/100/150 %) and a platform-wide daily AI hard stop.
 - Slack connector (polling, typed `approve <code>`), tested against a local fake Slack API.
 - Admin page: workspaces, mark invoices paid, usage, failed jobs, audit log.
+- **Admin Clients dashboard** (v0.3, `/admin/clients`, admin-only, mobile-first): per-client profile links, today's posts/replies/comments against the Viral warm-up caps, and a 7/30-day analytics page (activity per platform, approvals, inbound handled, impressions where available, followers, AI spend vs budget, recent activity). Filled by a read-only collector every 15 min that never calls platform write APIs or the X API.
 
 **Client 1 stack** (the production pilot, run on n8n)
 - 14 n8n workflows (exported **inactive**, with no credentials): Slack poller, bot, approvals/commands, hourly approval batches, Viral coach, X engagement drafter, Buffer post tool, browser task tool, onboarding interview.
 - `client1-state`: a stdlib-only Python helper for memory, guardrails, approvals, batches and the coach, with offline tests.
 - `browser-agent`: a browser-use HTTP service for read-only browsing tasks, with a domain allow-list and metered spend.
 
-**Tests:** 45 vitest tests, typecheck clean, headless E2E 12/12, plus the `client1-state` offline tests.
+**Tests:** 60 vitest tests, typecheck clean, headless E2E 19/19, plus the `client1-state` offline tests.
 
 **Not yet done:** see [app/STATUS.md](app/STATUS.md) and the [roadmap](docs/roadmap.md). Tier caps in the app, real Slack/Buffer runs, web push/email, Postgres and the VPS move are all still to come.
 

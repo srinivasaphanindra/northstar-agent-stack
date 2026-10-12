@@ -45,7 +45,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
     <main className="max-w-6xl mx-auto px-5 py-6 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <span className="brand">NORTHSTAR · ADMIN</span>
-        <Link href="/app" className="chip no-underline">Back to app</Link>
+        <div className="flex gap-2"><Link href="/admin/clients" className="chip no-underline">Clients</Link><Link href="/app" className="chip no-underline">Back to app</Link></div>
       </div>
       <Flash sp={sp} />
       {plat.level === "stop" && (

@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.0 — 2026-10-12
+
+Local demo only: `PUBLISH_DRY_RUN=true`. Demo DB backed up first and migrated with `prisma db push` (4 new tables).
+
+### Added
+- Admin-only, mobile-first **Clients** dashboard (`/admin/clients`): each client's profile links (read from existing config at collect time, never stored in the repo) and today's posts, replies and comments against its caps.
+- Per-client analytics (`/admin/clients/<key>`, 7 or 30 days): posts, replies and comments per day per platform; approvals approved/rejected/edited; inbound messages handled; impressions (Buffer, where available); follower trend; AI spend against budget ($35/month on Viral); recent activity with links.
+- Viral 4-week warm-up caps in `config/clients.yaml` (X 4/8 → 15/30 posts/replies a day; LinkedIn and Facebook ramps), with week math in IST.
+- Read-only collector (`src/core/clients/`), every 15 min in the worker (`CLIENTS_COLLECTOR`, `CLIENTS_COLLECT_SECONDS`) or `npm run collect`. Sources: X post ledger and inbound log, the bots' sync-log entries, followers log, AI spend log, client helper GET endpoints (`/health`, `/guard/limits`, `/engage/status`), client audit log, n8n executions read API, and Buffer analytics read queries only when a key file is already configured. No platform write APIs, no X API calls; missing files and failed sources are recorded in `CollectorRun` and skipped.
+- New tables: `ClientProfile`, `ClientActivity`, `ClientMetric`, `CollectorRun`.
+
+### Tests
+- vitest 60/60 (15 new: parsers, aggregation, caps math, collector idempotency/read-only, admin-only access), typecheck clean, headless E2E 19/19 (new admin and non-admin Clients checks).
+
 ## v0.2.0 — 2026-10-12
 
 Merged from branch `v0.2` (merge db0be90). Local demo only: `PUBLISH_DRY_RUN=true`, Buffer OAuth off (no `BUFFER_CLIENT_ID`), no Slack token. Demo DB migrated with `prisma db push` (adds nullable `Draft.scheduledAt`).
