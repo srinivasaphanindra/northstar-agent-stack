@@ -1,7 +1,9 @@
 # Northstar app roadmap
 
-Sources: `~/apps/northstar-app/STATUS.md` (phase 1, 2026-10-12), `northstar-aaas-platform.md` (§5 Option B, §8),
-`n8n-client-bot.md` (client 1 bot v2: guardrails, Viral coach, tier update + hourly approval batches).
+Last updated 2026-10-12. Order: v0.1 → v0.2 → v0.3 → v0.4 (next 2 weeks) → v1.0 (VPS move) → Later.
+
+Sources: `app/STATUS.md`, the internal platform plan, the client 1 n8n bot (guardrails, Viral coach, hourly approval
+batches) and internal competitor research (cited below as "research §n"; not published).
 
 ---
 
@@ -76,7 +78,47 @@ Sources: `~/apps/northstar-app/STATUS.md` (phase 1, 2026-10-12), `northstar-aaas
 
 ---
 
-## v1.0 — ready for the VPS move
+### v0.3 note — admin Clients dashboard
+
+**Scope**
+- Admin **Clients** page listing clients 0 and 1: profile links per platform, today's posts and replies against their tier caps.
+- Per-client analytics page: last 7 and last 30 days (posts, replies, approvals, cap usage).
+- Read-only collector that refreshes every 15 minutes into the app DB (no writes to any platform or to n8n).
+
+**Tests**
+- Unit: collector parsing and upsert (idempotent on re-run), cap math for "today" in IST, 7/30-day aggregation.
+- E2E: admin sees both clients with links and today's counts vs caps; a non-admin gets 403; analytics page renders both ranges.
+
+**Done when**
+- Both clients show correct today-vs-cap numbers within 15 minutes of activity, 7/30-day pages match the source
+  counts by spot check, and the collector is proven read-only.
+
+---
+
+## v0.4 — next 2 weeks (after v0.3)
+
+**Scope**
+- **(1) Weekly results report per client in Slack**: leads, inquiries and WhatsApp clicks attributed to posts
+  (UTM / tracked links per post), alongside the existing weekly report. Answers the "does it actually work"
+  objection (research §3.4–3.5).
+- **(4) Inbox to lead**: buying-intent comments and DMs are classified; each gets a drafted reply (approval-gated as
+  usual) plus a lead card (name, need, next step) written to the CRM (GoHighLevel / webhook).
+- **(7) Free audit → sample week**: the free audit becomes a sample week of 7 posts in the prospect's voice, built from
+  the chat interview, to show voice quality up front (research §4, off-brand objection).
+
+**Tests**
+- Unit: attribution of clicks/inquiries to post IDs; intent classifier (buying / not / unsure); lead-card schema and
+  CRM write (mocked); sample-week generator returns exactly 7 posts tagged to the prospect.
+- E2E: a seeded week produces a Slack report with correct numbers; a seeded buying-intent DM yields a pending reply
+  and a CRM lead card; a test prospect receives a 7-post sample week.
+
+**Done when**
+- Client 1 gets a correct weekly results report in Slack, at least one real buying-intent comment/DM becomes an
+  approved reply plus a CRM lead card, and the sample week replaces the old audit in the sales flow; tests green.
+
+---
+
+## v1.0 — ready for the VPS move (unchanged; now after v0.4, before Later)
 
 **Scope**
 - Deployment: run on a VPS with the existing kit (systemd + Caddy HTTPS, or the Docker compose once tested); domain.
@@ -97,3 +139,25 @@ Sources: `~/apps/northstar-app/STATUS.md` (phase 1, 2026-10-12), `northstar-aaas
 **Done when**
 - The app runs on the VPS over HTTPS on Postgres, survives a reboot, backups run daily and a restore has been
   tested, alerts reach the admin, and one friendly business completes a week end to end before sign-ups open.
+
+
+---
+
+## Later (unscheduled, after v1.0)
+
+### (2) WhatsApp as a client chat channel
+- **Scope**: client chat over WhatsApp via a self-hosted bridge on the operator's business number, no paid API.
+  Gating first step: research the number-ban risk of unofficial bridges; stop if the risk is unacceptable.
+  Motivation: Indian SMB owners live in WhatsApp, not Slack (research §4; Manva, Meta Business AI).
+- **Tests**: written ban-risk findings; on a spare number, approve/reject round-trip and reconnect after bridge restart.
+- **Done when**: risk research is signed off by the owner, and a test client can chat, receive drafts and approve via WhatsApp.
+
+### (3) Indian languages and local presence
+- **Scope**: Telugu, Hindi and Kannada posts; festival and local calendars; Google Business Profile posts and review replies (approval-gated). Closes the gap vs Manva's 11 languages (research §1, §4).
+- **Tests**: native-speaker review of sample posts per language; calendar triggers drafts before festival dates; GBP post and review reply in a test profile.
+- **Done when**: one client posts approved content in at least one of these languages, festival drafts arrive on time, and GBP posts/replies work end to end.
+
+### (5) Earned autonomy
+- **Scope**: after about 20 clean approvals of a post type, the client may opt in to auto-post that type (per type, revocable, logged in the audit log). It never auto-approves on timeout (research §2 approval write-up, §3.1).
+- **Tests**: counter resets on reject/edit; opt-in required; timeout leaves items pending/expired, never posted; revoke stops auto-posting.
+- **Done when**: a client opts in for one type after 20 clean approvals, those posts go out with audit entries, and timeout tests prove no auto-approval.

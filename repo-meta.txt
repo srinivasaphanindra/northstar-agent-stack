@@ -1,0 +1,12 @@
+Description:
+AI social media agent for Indian small businesses: chat in Slack, drafts in your voice, publishes only after a one-tap OK. Next.js + n8n + Buffer.
+
+Topics (8):
+ai-agent
+social-media-automation
+small-business
+india
+nextjs
+n8n
+slack-bot
+human-in-the-loop
