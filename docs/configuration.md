@@ -119,22 +119,22 @@ N8N_API_KEY=
 OPENROUTER_API_KEY=
 BROWSER_AGENT_MODEL=google/gemini-3.1-flash-lite
 BROWSER_AGENT_CDP_URL=http://127.0.0.1:9350
-# Spend metering + domain allow-list go through client1-state (127.0.0.1:8771) by default:
+# Spend metering + domain allow-list go through state-helper (127.0.0.1:8771) by default:
 # BROWSER_AGENT_BASE_URL=http://127.0.0.1:8771/or/browser/v1
 # BROWSER_AGENT_ALLOWLIST_URL=http://127.0.0.1:8771/guard/allowlist
 ```
 
-## `client1-state/.env.example`
+## `state-helper/.env.example`
 
 ```dotenv
-# client1-state helper: no secrets needed. bin/client1-state-up.sh sets all C1_* paths under $RUN_DIR/client1.
+# state-helper helper: no secrets needed. bin/state-helper-up.sh sets all CS_* paths under $RUN_DIR/example-client.
 # Overrides (optional):
-# C1_PORT=8771
-# C1_GUARDRAILS=clients/client1/guardrails.yaml
-# C1_WORKER=1          # 0 = no background engagement worker
-# C1_NOTIFY=0          # 1 = call bin/notify.sh for owner notifications (not included in this repo)
-# C1_OR_UPSTREAM=https://openrouter.ai/api/v1
-# C1_BROWSER=http://127.0.0.1:8770
+# CS_PORT=8771
+# CS_GUARDRAILS=templates/guardrails.example.yaml
+# CS_WORKER=1          # 0 = no background engagement worker
+# CS_NOTIFY=0          # 1 = call bin/notify.sh for owner notifications (not included in this repo)
+# CS_OR_UPSTREAM=https://openrouter.ai/api/v1
+# CS_BROWSER=http://127.0.0.1:8770
 ```
 
 ## Safety switches

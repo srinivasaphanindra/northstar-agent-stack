@@ -1,7 +1,7 @@
 #!/bin/bash
 # browser-agent-up.sh — idempotent start of the browser-use HTTP service on 127.0.0.1:8770.
 # Usage: browser-agent-up.sh [start|stop|restart|status]
-# Needs: client1 Chrome on CDP 9350 (bin/client1-chrome.sh, started here if down), OPENROUTER_API_KEY
+# Needs: example-client Chrome on CDP 9350 (bin/client-chrome.sh, started here if down), OPENROUTER_API_KEY
 # (from $STACK_DIR/browser-agent/.env chmod 600, else from the environment; never printed). Model override: BROWSER_AGENT_MODEL.
 set -uo pipefail
 for _fd in /proc/$$/fd/*; do _n=${_fd##*/}
@@ -23,7 +23,7 @@ case "${1:-start}" in
   *) echo "usage: $0 [start|stop|restart|status]"; exit 2 ;;
 esac
 if health; then echo "already up: 127.0.0.1:$PORT"; exit 0; fi
-$STACK_DIR/bin/client1-chrome.sh start >/dev/null 2>&1 || echo "WARN: client1 Chrome (CDP 9350) not up; service will report degraded"
+$STACK_DIR/bin/client-chrome.sh start >/dev/null 2>&1 || echo "WARN: example-client Chrome (CDP 9350) not up; service will report degraded"
 # Secrets/config: $STACK_DIR/browser-agent/.env (chmod 600, KEY=VALUE lines) wins, so this works from any shell/cron.
 ENVF=$APP/.env
 if [ -f "$ENVF" ]; then
@@ -34,7 +34,7 @@ if [ -f "$ENVF" ]; then
   done < <(grep -E '^[A-Z_]+=' "$ENVF")
 fi
 [ -n "${OPENROUTER_API_KEY:-}" ] || { echo "ERROR: OPENROUTER_API_KEY not available (put it in $ENVF, chmod 600)" >&2; exit 1; }
-# 2026-10-12 guardrails: meter LLM spend through client1-state (127.0.0.1:8771) and enforce its domain allow-list.
+# 2026-10-12 guardrails: meter LLM spend through state-helper (127.0.0.1:8771) and enforce its domain allow-list.
 # Set BROWSER_AGENT_BASE_URL=https://openrouter.ai/api/v1 in .env to bypass the meter (not recommended).
 export BROWSER_AGENT_BASE_URL="${BROWSER_AGENT_BASE_URL:-http://127.0.0.1:8771/or/browser/v1}"
 export BROWSER_AGENT_ALLOWLIST_URL="${BROWSER_AGENT_ALLOWLIST_URL:-http://127.0.0.1:8771/guard/allowlist}"

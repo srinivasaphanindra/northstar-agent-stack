@@ -8,7 +8,7 @@
 The box has no cron or systemd, so the loop is started by `ensure` (services-watchdog.sh calls it on each pass).
 
 What it does each pass:
-  * health: n8n, client0-state :8772, client1-state :8771, app :3100 and its worker, browser agent :8770, Chrome CDP endpoints
+  * health: n8n, each client instance's state helper (SELFHEAL_INSTANCES), app :3100 and its worker, browser agent :8770, Chrome CDP endpoints
   * recovery: restarts through the existing service scripts with exponential backoff, at most 3 tries per service per hour
     (state in STATE_FILE); anything still broken after that is escalated as a JSON alert in ALERT_DIR
   * n8n task-runner "Offer expired" storm in the n8n log -> counts as an n8n failure (same backoff)
@@ -45,19 +45,31 @@ INTERVAL = int(E("SELFHEAL_INTERVAL", "300"))
 MAX_TRIES_PER_HOUR = 3
 BASE_BACKOFF_S = 300                 # 5 min, then 10, then 20
 OFFER_EXPIRED_STORM = int(E("SELFHEAL_OFFER_EXPIRED_STORM", "30"))   # new lines in one pass
-CLIENTS = {  # client -> (audit log, helper db)
-    "client0": (f"{HOME}/agency/clients/client0/audit-log.tsv", f"{HOME}/agency/clients/client0/bot-state.sqlite"),
-    "client1": (f"{HOME}/agency/clients/client1/audit-log.tsv", f"{HOME}/agency/clients/client1/bot-state.sqlite"),
-}
+CLIENTS_DIR = E("SELFHEAL_CLIENTS_DIR", f"{HOME}/agency/clients")
+
+def parse_instances(spec):
+    """SELFHEAL_INSTANCES: comma list of key:port[:health_text[:restart_script]], e.g.
+    "example-client:8771,example-client-b:8772". Each client instance runs its own state
+    helper; defaults: health text "state-helper", restart "$SELFHEAL_BIN/<key>-state-up.sh restart",
+    audit log and helper db under $SELFHEAL_CLIENTS_DIR/<key>/."""
+    out = []
+    for item in filter(None, (x.strip() for x in spec.split(","))):
+        f = item.split(":")
+        key, port = f[0], int(f[1])
+        out.append({"key": key, "port": port, "expect": f[2] if len(f) > 2 and f[2] else "state-helper",
+                    "restart": f[3] if len(f) > 3 and f[3] else f"{BIN}/{key}-state-up.sh"})
+    return out
+
+INSTANCES = parse_instances(E("SELFHEAL_INSTANCES", ""))
+CLIENTS = {i["key"]: (f"{CLIENTS_DIR}/{i['key']}/audit-log.tsv", f"{CLIENTS_DIR}/{i['key']}/bot-state.sqlite") for i in INSTANCES}
 SERVICES = [  # name, health url, expected text, restart command (existing service scripts only)
     ("n8n", "http://127.0.0.1:5678/healthz", '"ok"', [f"{BIN}/n8n-up.sh", "restart"]),
-    ("client0-state", "http://127.0.0.1:8772/health", "client0-state", [f"{BIN}/client0-state-up.sh", "restart"]),
-    ("client1-state", "http://127.0.0.1:8771/health", "client1-state", [f"{BIN}/client1-state-up.sh", "restart"]),
+    *[(f"{i['key']}-state", f"http://127.0.0.1:{i['port']}/health", i["expect"], [i["restart"], "restart"]) for i in INSTANCES],
     ("northstar-app", "http://127.0.0.1:3100/api/health", "northstar-app", [f"{BIN}/northstar-app-up.sh", "start"]),
     ("browser-agent", "http://127.0.0.1:8770/health", "browser-agent", [f"{BIN}/browser-agent-up.sh", "restart"]),
 ]
-CDP_PORTS = [int(p) for p in E("SELFHEAL_CDP_PORTS", "9333,9350,9351").split(",") if p]
-REAP_TAB_PORTS = [int(p) for p in E("SELFHEAL_REAP_TAB_PORTS", "9350,9351").split(",") if p]
+CDP_PORTS = [int(p) for p in E("SELFHEAL_CDP_PORTS", "").split(",") if p]
+REAP_TAB_PORTS = [int(p) for p in E("SELFHEAL_REAP_TAB_PORTS", "").split(",") if p]
 IDEMPOTENT_ALLOWLIST = set(filter(None, E("SELFHEAL_RETRY_ALLOWLIST",
     # read / poll / collector workflows only. The Slack pollers are NOT here: they dispatch approvals (which publish).
     "Client bot: read receipt (reusable)").split("|")))

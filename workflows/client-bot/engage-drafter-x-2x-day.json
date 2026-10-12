@@ -1,6 +1,6 @@
 {
   "id": "lP4iZYQA5jvtNaiD",
-  "name": "Client1 engage: drafter (X, 2x/day)",
+  "name": "Example Client engage: drafter (X, 2x/day)",
   "active": false,
   "nodes": [
     {
@@ -68,7 +68,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-engage-draft",
+        "path": "example-client-engage-draft",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}

@@ -1,6 +1,6 @@
 """browser-agent: tiny local HTTP wrapper around browser-use (client agent tool).
 
-Connects to an EXISTING Chrome over CDP (default http://127.0.0.1:9350 = client1 lane), never launches one.
+Connects to an EXISTING Chrome over CDP (default http://127.0.0.1:9350 = example-client lane), never launches one.
 LLM: OpenRouter via browser-use's OpenAI-compatible ChatOpenAI (base_url https://openrouter.ai/api/v1).
 
 Endpoints (127.0.0.1:8770):
@@ -25,9 +25,9 @@ from browser_use import Agent, Browser, ChatOpenAI, Tools
 
 CDP_URL = os.environ.get("BROWSER_AGENT_CDP_URL", "http://127.0.0.1:9350")
 MODEL = os.environ.get("BROWSER_AGENT_MODEL", "google/gemini-3.1-flash-lite")
-# 2026-10-12 guardrails: LLM calls go through the client1-state metering proxy when BROWSER_AGENT_BASE_URL is set
+# 2026-10-12 guardrails: LLM calls go through the state-helper metering proxy when BROWSER_AGENT_BASE_URL is set
 BASE_URL = os.environ.get("BROWSER_AGENT_BASE_URL", "https://openrouter.ai/api/v1")
-# Domain allow-list (client's own platforms + website), fetched from client1-state; built-in list if it can't be fetched.
+# Domain allow-list (client's own platforms + website), fetched from state-helper; built-in list if it can't be fetched.
 ALLOWLIST_URL = os.environ.get("BROWSER_AGENT_ALLOWLIST_URL", "http://127.0.0.1:8771/guard/allowlist")
 DEFAULT_ALLOWED = ["x.com", "twitter.com", "linkedin.com", "facebook.com", "buffer.com"]
 _ALLOW_CACHE = {"t": 0.0, "domains": DEFAULT_ALLOWED}
@@ -213,7 +213,7 @@ async def run_agent(tid: str, req: TaskReq, max_steps: int) -> dict:
     guard = {"stop": False, "reason": "", "search_typed": False}
     before = page_targets()
     if not before and not cdp_alive():
-        return {"status": "error", "result_text": f"Chrome CDP not reachable at {CDP_URL} (run client1-chrome.sh)",
+        return {"status": "error", "result_text": f"Chrome CDP not reachable at {CDP_URL} (run client-chrome.sh)",
                 "urls_visited": [], "steps": 0, "_secs": 0}
 
     llm = ChatOpenAI(model=MODEL, base_url=BASE_URL, api_key=os.environ["OPENROUTER_API_KEY"],

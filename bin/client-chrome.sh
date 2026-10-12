@@ -1,22 +1,23 @@
 #!/bin/bash
-# client1-chrome.sh — dedicated, SANDBOXED Chrome for client 1 (the owner's second account set:
-# LinkedIn your-linkedin-handle, Facebook share/<fb-share-id>, X @your_x_handle).
+# client-chrome.sh — dedicated, SANDBOXED Chrome for one client instance (that client's own signed-in accounts).
+# Env: CLIENT_KEY (default example-client), CLIENT_CDP_PORT (default 9350), CLIENT_DISPLAY (default :20).
 # v2 2026-10-11: own Xvfb display :20 (nothing else on it, so the "Sign in" link can expose it safely) and Chrome
 # runs inside bubblewrap: it sees only its own profile dir + read-only system dirs (no ~/apps, ~/agency, /workspace,
 # /cursor, /run secrets). CDP 127.0.0.1:9350 still reachable from the host (network not unshared).
 # Idempotent: if CDP on 9350 already answers, does nothing. Never logs in.
-# Usage: client1-chrome.sh [start] | status | stop
-# Env: CLIENT1_DISPLAY (default :20), CLIENT1_SANDBOX=0 to run without bubblewrap (not recommended).
+# Usage: client-chrome.sh [start] | status | stop
+# Env: CLIENT_DISPLAY (default :20), CLIENT_SANDBOX=0 to run without bubblewrap (not recommended).
 set -euo pipefail
 for _fd in /proc/$$/fd/*; do _n=${_fd##*/}
   case "$_n" in 0|1|2|255) ;; *[!0-9]*) ;; *) eval "exec $_n>&-" 2>/dev/null || true;; esac
 done
 . "$(dirname "${BASH_SOURCE[0]}")/_env.sh"
-DISP=${CLIENT1_DISPLAY:-:20}; DNUM=${DISP#:}
+DISP=${CLIENT_DISPLAY:-:20}; DNUM=${DISP#:}
 export DISPLAY=$DISP
-PORT=9350
-DIR=$RUN_DIR/chrome-profile/client1-profile
-LOG=$RUN_DIR/logs/client1-chrome.log
+K=${CLIENT_KEY:-example-client}
+PORT=${CLIENT_CDP_PORT:-9350}
+DIR=$RUN_DIR/chrome-profile/$K
+LOG=$RUN_DIR/logs/$K-chrome.log
 W=1366; H=900
 mkdir -p "$DIR" "$(dirname "$LOG")"
 ts(){ date '+%F %T IST'; }
@@ -48,7 +49,7 @@ SANDBOX=(bwrap --unshare-pid --unshare-uts --new-session   # no --unshare-ipc: X
 
 case "${1:-start}" in
   status)
-    if cdp_ok; then echo "client1 chrome UP port=$PORT display=$DISP sandbox=$([ "${CLIENT1_SANDBOX:-1}" = 0 ] && echo off || echo bwrap) pids=$(pids | tr '\n' ' ')"; else echo "client1 chrome DOWN port=$PORT"; exit 1; fi ;;
+    if cdp_ok; then echo "example-client chrome UP port=$PORT display=$DISP sandbox=$([ "${CLIENT_SANDBOX:-1}" = 0 ] && echo off || echo bwrap) pids=$(pids | tr '\n' ' ')"; else echo "example-client chrome DOWN port=$PORT"; exit 1; fi ;;
   stop)
     p=$(pids); [ -n "$p" ] || { echo "not running"; exit 0; }
     echo "[$(ts)] stop pids=$(echo $p)" >> "$LOG"; kill $p 2>/dev/null || true
@@ -61,12 +62,12 @@ case "${1:-start}" in
     alive=$(pids | tr '\n' ' ')
     if [ -n "${alive// /}" ]; then
       echo "[$(ts)] start skipped: chrome alive (pids $alive) but CDP slow/not answering; not launching a duplicate" >> "$LOG"
-      echo "WARN: client1 chrome alive (pids $alive) but CDP $PORT not answering; not launching a duplicate" >&2; exit 1
+      echo "WARN: example-client chrome alive (pids $alive) but CDP $PORT not answering; not launching a duplicate" >&2; exit 1
     fi
     ensure_xvfb
     rm -f "$DIR"/Singleton* 2>/dev/null || true
-    echo "[$(ts)] launch port=$PORT dir=$DIR display=$DISP sandbox=${CLIENT1_SANDBOX:-1}" >> "$LOG"
-    if [ "${CLIENT1_SANDBOX:-1}" = 0 ]; then PRE=(); else PRE=("${SANDBOX[@]}"); fi
+    echo "[$(ts)] launch port=$PORT dir=$DIR display=$DISP sandbox=${CLIENT_SANDBOX:-1}" >> "$LOG"
+    if [ "${CLIENT_SANDBOX:-1}" = 0 ]; then PRE=(); else PRE=("${SANDBOX[@]}"); fi
     setsid nohup "${PRE[@]}" /usr/bin/google-chrome "${CHROME_ARGS[@]}" \
       https://www.linkedin.com/feed/ https://www.facebook.com/ https://x.com/home \
       >> "$LOG" 2>&1 < /dev/null &

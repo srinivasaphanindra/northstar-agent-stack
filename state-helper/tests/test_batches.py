@@ -2,18 +2,18 @@
 per-platform pacing and the 7-day warning pause, and the hourly approval batches (timing, skip-when-ignored,
 approval-to-schedule, progress, edit/target commands, plan->pick->build->register with FAKE data).
 Fully offline: temp DB + temp guardrails copy, notifications off, worker off; no Slack, no browser, no LLM.
-Usage: python3 client1-state/tests/test_batches.py"""
+Usage: python3 state-helper/tests/test_batches.py"""
 import os, sys, json, shutil, tempfile, time, re, traceback, random
 from datetime import datetime, timedelta
 T = tempfile.mkdtemp(prefix="c1batch-")
-SRC = os.environ.get("C1_GUARDRAILS_SRC") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "clients", "client1", "guardrails.yaml")
+SRC = os.environ.get("CS_GUARDRAILS_SRC") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "templates", "guardrails.example.yaml")
 GY = f"{T}/guardrails.yaml"; shutil.copy(SRC, GY)
 # ramp-clock tests use their own fake "now"; the live warm-up start_date would pin the clock to 2026-10-12
 import re as _re; _y = open(GY).read(); open(GY, "w").write(_re.sub(r"(?m)^\s*start_date:.*\n", "", _y))
 open(f"{T}/notes.md", "w").write("# notes\n## Voice\nplain, friendly\n")
-os.environ.update(C1_DB=f"{T}/db.sqlite", C1_NOTES=f"{T}/notes.md", C1_PAUSE=f"{T}/PAUSE", C1_PAUSE_ALL=f"{T}/PAUSE_ALL",
-                  C1_LEDGER=f"{T}/ledger.tsv", C1_LOG=f"{T}/log", C1_GUARDRAILS=GY, C1_AUDIT=f"{T}/audit.tsv", C1_UPSELL=f"{T}/upsell.md",
-                  C1_NOTIFY="0", C1_WORKER="0", C1_OR_UPSTREAM="http://127.0.0.1:9")
+os.environ.update(CS_DB=f"{T}/db.sqlite", CS_NOTES=f"{T}/notes.md", CS_PAUSE=f"{T}/PAUSE", CS_PAUSE_ALL=f"{T}/PAUSE_ALL",
+                  CS_LEDGER=f"{T}/ledger.tsv", CS_LOG=f"{T}/log", CS_GUARDRAILS=GY, CS_AUDIT=f"{T}/audit.tsv", CS_UPSELL=f"{T}/upsell.md",
+                  CS_NOTIFY="0", CS_WORKER="0", CS_OR_UPSTREAM="http://127.0.0.1:9")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import server as S, coach as CO, guardrails as G, batches as BA
 S.init_db()
@@ -31,7 +31,7 @@ def c():
 ORIG = open(GY).read()
 def set_cfg(plan="starter", live=None, start_at=None):
     txt = re.sub(r"(?m)^plan:.*$", f"plan: {plan}", ORIG)
-    # Tests always start from a clean overrides block (client1 may have live go-live overrides).
+    # Tests always start from a clean overrides block (example-client may have live go-live overrides).
     txt = re.sub(r"(?ms)^overrides:.*\Z", "overrides: {}", txt)
     if live is not None or start_at is not None:
         ov = {}

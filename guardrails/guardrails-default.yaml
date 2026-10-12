@@ -1,5 +1,5 @@
 # Northstar client bot: guardrails template (copy to ~/agency/clients/<slug>/guardrails.yaml and edit).
-# Approved by the owner 2026-10-11. Read by the client helper service (client1-state) on every request
+# Approved by the owner 2026-10-11. Read by the client helper service (state-helper) on every request
 # (reloaded when the file changes), so edits take effect without a restart.
 #
 # How values are resolved (deep merge, later wins):  defaults  ->  tiers[<plan>]  ->  overrides

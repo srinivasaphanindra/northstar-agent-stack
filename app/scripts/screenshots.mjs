@@ -35,7 +35,7 @@ const check = (name, ok) => { results.push([name, ok]); log(ok ? "PASS" : "FAIL"
 
 // ---------- mobile, new client end to end ----------
 const email = `e2e-${Date.now()}@example.com`;
-const WSNAME = `Chai Corner (test ${String(Date.now()).slice(-5)})`;
+const WSNAME = `Example Cafe (test ${String(Date.now()).slice(-5)})`;
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36" });
   const page = await ctx.newPage();
@@ -51,7 +51,7 @@ const WSNAME = `Chai Corner (test ${String(Date.now()).slice(-5)})`;
   await shot(page, "10-onboarding-plan-payment-mobile");
   check("plan pick shows UPI payment box", await page.isVisible("img[alt='UPI QR code']"));
   await page.click("text=I've paid / I'll pay later: continue"); await page.waitForSelector("text=1/10");
-  const answers = ["Chai Corner, we sell masala chai and snacks", "Hyderabad, Madhapur. Office workers", "More footfall in the evening", "skip", "Warm, quick, local", "Instagram and X", "Chai tips; never politics", "skip", "Approve every post", "WhatsApp, 9 to 9"];
+  const answers = ["Example Cafe, we sell masala chai and snacks", "Hyderabad, Madhapur. Office workers", "More footfall in the evening", "skip", "Warm, quick, local", "Instagram and X", "Chai tips; never politics", "skip", "Approve every post", "WhatsApp, 9 to 9"];
   const bubbles = () => page.locator("div.whitespace-pre-wrap").count();
   const answer = async (a) => {
     const n = await bubbles();
@@ -114,7 +114,7 @@ const WSNAME = `Chai Corner (test ${String(Date.now()).slice(-5)})`;
   // v0.3: the Clients dashboard is admin-only
   const nc = await page.goto(`${BASE}/admin/clients`);
   check("non-admin gets 404 on /admin/clients", nc?.status() === 404);
-  const nd = await page.goto(`${BASE}/admin/clients/client0`);
+  const nd = await page.goto(`${BASE}/admin/clients/example-owner`);
   check("non-admin gets 404 on a client page", nd?.status() === 404);
   await ctx.close();
 }
@@ -127,10 +127,10 @@ const WSNAME = `Chai Corner (test ${String(Date.now()).slice(-5)})`;
   const page = await ctx.newPage();
   await login(page, process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD);
   const r1 = await page.goto(`${BASE}/admin/clients`);
-  check("admin sees /admin/clients", r1?.ok() && await page.isVisible("[data-testid=client-client0]") && await page.isVisible("[data-testid=client-client1]"));
+  check("admin sees /admin/clients", r1?.ok() && await page.isVisible("[data-testid=client-example-owner]") && await page.isVisible("[data-testid=client-example-client]"));
   check("clients show caps", (await page.locator("[role=meter]").count()) >= 6);
   await page.screenshot({ path: `${PRIV}20-clients-mobile.png`, fullPage: true });
-  await page.click("[data-testid=client-client1]"); await page.waitForURL(/\/admin\/clients\/client1/);
+  await page.click("[data-testid=client-example-client]"); await page.waitForURL(/\/admin\/clients\/example-client/);
   check("client analytics page renders", await page.isVisible("text=Recent activity") && await page.isVisible("text=AI spend (month)"));
   await page.click("text=30 days"); await page.waitForURL(/range=30/);
   check("30-day range works", await page.isVisible("text=Per day, last 30 days"));

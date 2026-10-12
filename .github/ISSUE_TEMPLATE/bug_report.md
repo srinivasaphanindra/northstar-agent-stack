@@ -11,7 +11,7 @@ labels: bug
 **Steps to reproduce**
 1.
 
-**Component:** app / worker / n8n workflow / client1-state / browser-agent / bin / docs
+**Component:** app / worker / n8n workflow / state-helper / browser-agent / bin / docs
 
 **Version / commit:**
 

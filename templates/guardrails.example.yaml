@@ -1,5 +1,5 @@
-# Client 1 guardrails (from ~/agency/product/guardrails-default.yaml, 2026-10-12; v2 with the Viral tier 2026-10-12 00:30 IST).
-# Approved by the owner 2026-10-11. Read by the client helper service (client1-state) on every request
+# Example Client guardrails (from ~/agency/product/guardrails-default.yaml, 2026-10-12; v2 with the Viral tier 2026-10-12 00:30 IST).
+# Approved by the owner 2026-10-11. Read by the client helper service (state-helper) on every request
 # (reloaded when the file changes), so edits take effect without a restart.
 #
 # How values are resolved (deep merge, later wins):  defaults  ->  tiers[<plan>]  ->  overrides
@@ -12,7 +12,7 @@
 # alternative. It never just says no.
 
 version: 5                       # 5 = new 1x/2x/3x tier caps + warm-up all tiers + X watchlist targets (the owner 2026-10-12 01:10 IST)
-client: "client1"
+client: "example-client"
 plan: viral          # Viral (3x), set 2026-10-12 by the owner; warm-up starts 2026-10-12, all actions approval-gated
 
 defaults:
@@ -83,10 +83,10 @@ defaults:
   scope:
     in_scope: "social media and online presence"
     notify_owner: true
-    upsell_log: "~/agency/clients/client1/upsell-log.md"
+    upsell_log: "~/agency/clients/example-client/upsell-log.md"
 
   audit:
-    log: "~/agency/clients/client1/audit-log.tsv"
+    log: "~/agency/clients/example-client/audit-log.tsv"
     resume_all_by: [U0000000001]
 
   ramp:                          # warm-up ramp (off unless the tier turns it on)

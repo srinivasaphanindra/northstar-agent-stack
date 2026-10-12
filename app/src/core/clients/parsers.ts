@@ -84,7 +84,7 @@ export function parseSyncLog(text: string, bots: Record<string, Platform>, count
   return out;
 }
 
-/** client1 audit-log.tsv: header `ts_ist event by ref outcome detail`. Actor ids are not kept. */
+/** example-client audit-log.tsv: header `ts_ist event by ref outcome detail`. Actor ids are not kept. */
 export function parseClientAudit(text: string): Activity[] {
   const out: Activity[] = [];
   for (const l of lines(text)) {
@@ -143,7 +143,7 @@ export function parseSpendLog(text: string): { today: number; week: number; tota
   return null;
 }
 
-/** client1-state /guard/limits summary: "X: replies 1/12, posts 0/6; LinkedIn: approval-only comments 0/2, posts 0/1; ..." */
+/** state-helper /guard/limits summary: "X: replies 1/12, posts 0/6; LinkedIn: approval-only comments 0/2, posts 0/1; ..." */
 export function parseHelperUsage(summary: string): { platform: Platform; kind: "posts" | "replies" | "comments"; used: number; cap: number }[] {
   const out: { platform: Platform; kind: "posts" | "replies" | "comments"; used: number; cap: number }[] = [];
   const names: Record<string, Platform> = { x: "x", linkedin: "linkedin", facebook: "facebook" };

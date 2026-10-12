@@ -1,11 +1,11 @@
 {
   "id": "VcJuvRMlRZEqqPC3",
-  "name": "Client1 bot: dry-run harness",
+  "name": "Example Client bot: dry-run harness",
   "active": false,
   "nodes": [
     {
       "id": "x1",
-      "name": "POST /client1-dryrun-actions",
+      "name": "POST /example-client-dryrun-actions",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -14,7 +14,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-actions",
+        "path": "example-client-dryrun-actions",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -36,7 +36,7 @@
           "__rl": true,
           "value": "FbTdLU9H465W10Yd",
           "mode": "id",
-          "cachedResultName": "Client1 bot: actions (approvals, commands, notify)"
+          "cachedResultName": "Example Client bot: actions (approvals, commands, notify)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -77,7 +77,7 @@
     },
     {
       "id": "x3",
-      "name": "POST /client1-dryrun-handler",
+      "name": "POST /example-client-dryrun-handler",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -86,7 +86,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-handler",
+        "path": "example-client-dryrun-handler",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -108,7 +108,7 @@
           "__rl": true,
           "value": "FFKpguli7WZX9cuz",
           "mode": "id",
-          "cachedResultName": "Client1 bot"
+          "cachedResultName": "Example Client bot"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -215,7 +215,7 @@
     },
     {
       "id": "x5",
-      "name": "POST /client1-dryrun-propose",
+      "name": "POST /example-client-dryrun-propose",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -224,7 +224,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-propose",
+        "path": "example-client-dryrun-propose",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -246,7 +246,7 @@
           "__rl": true,
           "value": "FBNBcOKeRVx0gMHw",
           "mode": "id",
-          "cachedResultName": "Tool: Propose post (client1)"
+          "cachedResultName": "Tool: Propose post (example-client)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -341,7 +341,7 @@
     },
     {
       "id": "x7",
-      "name": "POST /client1-dryrun-engage",
+      "name": "POST /example-client-dryrun-engage",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -350,7 +350,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-engage",
+        "path": "example-client-dryrun-engage",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -372,7 +372,7 @@
           "__rl": true,
           "value": "lP4iZYQA5jvtNaiD",
           "mode": "id",
-          "cachedResultName": "Client1 engage: drafter (X, 2x/day)"
+          "cachedResultName": "Example Client engage: drafter (X, 2x/day)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -402,7 +402,7 @@
     },
     {
       "id": "x9",
-      "name": "POST /client1-dryrun-onboard",
+      "name": "POST /example-client-dryrun-onboard",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -411,7 +411,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-onboard",
+        "path": "example-client-dryrun-onboard",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -438,7 +438,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "client": "client1",
+            "client": "example-client",
             "channel": "C0000000001",
             "thread_ts": "={{ $json.body.thread_ts }}",
             "ts": "={{ $json.body.ts || '' }}",
@@ -540,7 +540,7 @@
     },
     {
       "id": "xc1",
-      "name": "POST /client1-dryrun-coach",
+      "name": "POST /example-client-dryrun-coach",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -549,7 +549,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-coach",
+        "path": "example-client-dryrun-coach",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -571,7 +571,7 @@
           "__rl": true,
           "value": "bsVhx7Sp3eHcvWsh",
           "mode": "id",
-          "cachedResultName": "Client1 coach: action lists (2x/day)"
+          "cachedResultName": "Example Client coach: action lists (2x/day)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -645,7 +645,7 @@
     },
     {
       "id": "xc3",
-      "name": "POST /client1-dryrun-coach-tick",
+      "name": "POST /example-client-dryrun-coach-tick",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -654,7 +654,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-coach-tick",
+        "path": "example-client-dryrun-coach-tick",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -676,7 +676,7 @@
           "__rl": true,
           "value": "FXYkTqcnVGaRVLIb",
           "mode": "id",
-          "cachedResultName": "Client1 coach: reminders + checks (30 min)"
+          "cachedResultName": "Example Client coach: reminders + checks (30 min)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -739,7 +739,7 @@
     },
     {
       "id": "xb1",
-      "name": "POST /client1-dryrun-batch",
+      "name": "POST /example-client-dryrun-batch",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
@@ -748,7 +748,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-dryrun-batch",
+        "path": "example-client-dryrun-batch",
         "responseMode": "lastNode",
         "responseData": "allEntries",
         "options": {}
@@ -770,7 +770,7 @@
           "__rl": true,
           "value": "egzwmJyVfZ6uQiT1",
           "mode": "id",
-          "cachedResultName": "Client1 batches: hourly drafts (15 min check)"
+          "cachedResultName": "Example Client batches: hourly drafts (15 min check)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -866,7 +866,7 @@
     }
   ],
   "connections": {
-    "POST /client1-dryrun-actions": {
+    "POST /example-client-dryrun-actions": {
       "main": [
         [
           {
@@ -877,7 +877,7 @@
         ]
       ]
     },
-    "POST /client1-dryrun-handler": {
+    "POST /example-client-dryrun-handler": {
       "main": [
         [
           {
@@ -888,7 +888,7 @@
         ]
       ]
     },
-    "POST /client1-dryrun-propose": {
+    "POST /example-client-dryrun-propose": {
       "main": [
         [
           {
@@ -899,7 +899,7 @@
         ]
       ]
     },
-    "POST /client1-dryrun-engage": {
+    "POST /example-client-dryrun-engage": {
       "main": [
         [
           {
@@ -910,7 +910,7 @@
         ]
       ]
     },
-    "POST /client1-dryrun-onboard": {
+    "POST /example-client-dryrun-onboard": {
       "main": [
         [
           {
@@ -921,7 +921,7 @@
         ]
       ]
     },
-    "POST /client1-dryrun-coach": {
+    "POST /example-client-dryrun-coach": {
       "main": [
         [
           {
@@ -932,7 +932,7 @@
         ]
       ]
     },
-    "POST /client1-dryrun-coach-tick": {
+    "POST /example-client-dryrun-coach-tick": {
       "main": [
         [
           {
@@ -943,7 +943,7 @@
         ]
       ]
     },
-    "POST /client1-dryrun-batch": {
+    "POST /example-client-dryrun-batch": {
       "main": [
         [
           {

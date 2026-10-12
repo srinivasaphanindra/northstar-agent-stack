@@ -27,8 +27,8 @@ class Retry(unittest.TestCase):
         self.assertFalse(S.may_retry("Some random workflow"))
     def test_never_publish_even_if_allowlisted(self):
         self.assertFalse(S.may_retry("Tool: Buffer post (x)"))
-        for n in ["Client1 bot: actions (approvals, commands, notify)", "Tool: Propose post (client1)", "Client1 engage: drafter",
-                  "Client0 bot: Slack poller (1 min)", "Reply sender"]:
+        for n in ["Example Client bot: actions (approvals, commands, notify)", "Tool: Propose post (example-client)", "Example Client engage: drafter",
+                  "Example Owner bot: Slack poller (1 min)", "Reply sender"]:
             self.assertFalse(S.may_retry(n), n)
     def test_retry_once_only_and_not_publish(self):
         import shutil; shutil.rmtree(f"{T}/alerts", ignore_errors=True)   # no open platform warning for this test
@@ -44,11 +44,19 @@ class Retry(unittest.TestCase):
         posts = [p for m, p in calls if m == "POST"]
         self.assertEqual(posts, ["/executions/1/retry"])
 
+class Instances(unittest.TestCase):
+    def test_configurable_instances(self):
+        i = S.parse_instances("example-client:8771, example-client-b:8772:custom-health:/opt/x-up.sh")
+        self.assertEqual([x["key"] for x in i], ["example-client", "example-client-b"])
+        self.assertEqual(i[0]["expect"], "state-helper"); self.assertTrue(i[0]["restart"].endswith("/example-client-state-up.sh"))
+        self.assertEqual((i[1]["port"], i[1]["expect"], i[1]["restart"]), (8772, "custom-health", "/opt/x-up.sh"))
+        self.assertEqual(S.parse_instances(""), [])
+
 class Alerts(unittest.TestCase):
     def test_alert_json_written_once_per_hour(self):
-        p = S.alert("platform_warning", "client0", "captcha on x.com")
+        p = S.alert("platform_warning", "example-client", "captcha on x.com")
         d = json.load(open(p)); self.assertEqual(d["kind"], "platform_warning"); self.assertIn("captcha", d["detail"])
-        self.assertEqual(S.alert("platform_warning", "client0", "again"), p)
+        self.assertEqual(S.alert("platform_warning", "example-client", "again"), p)
         self.assertEqual(len(os.listdir(f"{T}/alerts")), 1)
         self.assertIn("\talert\t", open(f"{T}/audit.tsv").read())
     def test_warning_blocks_retries(self):
@@ -58,7 +66,7 @@ class Alerts(unittest.TestCase):
 
 class HardLimits(unittest.TestCase):
     def test_never_edits_own_code_guardrails_caps(self):
-        for p in [S.SELF, f"{T}/guardrails.yaml", f"{T}/caps.md", os.path.expanduser("~/agency/clients/client1/guardrails.yaml"), "/etc/passwd"]:
+        for p in [S.SELF, f"{T}/guardrails.yaml", f"{T}/caps.md", os.path.expanduser("~/agency/clients/example-client/guardrails.yaml"), "/etc/passwd"]:
             with self.assertRaises(S.Forbidden, msg=p): S.safe_write(p, "x")
     def test_never_signs_in(self):
         with self.assertRaises(S.Forbidden): S.run([os.path.expanduser("~/agency/bin/signin-link.sh"), "start"])

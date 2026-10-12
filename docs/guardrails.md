@@ -20,6 +20,6 @@ Northstar is built so that a small business can trust it with its public account
 | Viral (₹24,999 / month) | 3× Starter | 3× Starter | 3× Starter | Image creation, support, CRM integration |
 
 ## Where it's enforced (v0.2.0)
-- **Client 1 pilot:** `clients/client1/guardrails.yaml` (v3) enforced by `client1-state/guardrails.py`, `batches.py` and `coach.py`.
+- **Example Client pilot:** `templates/guardrails.example.yaml` (v3) enforced by `state-helper/guardrails.py`, `batches.py` and `coach.py`.
 - **App:** `app/config/guardrails-default.yaml` (defaults → plan → per-workspace overrides) and the Guardrails settings page. In v0.2.0 the app has daily caps, content rules, an AI budget and the kill switch. The per-plan tier caps and warm-up are ported in v0.3 ([roadmap](roadmap.md)).
 - **Template for new clients:** `guardrails/guardrails-default.yaml`.

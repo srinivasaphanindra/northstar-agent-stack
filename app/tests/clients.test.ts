@@ -64,18 +64,18 @@ describe("parsers", () => {
       "2026-10-12 12:33:53\tdecide\tU0000000001\t1.2\tdiscard\tengage",
       "2026-10-12 12:34:52\tdecide\tU0000000001\t1.3\tedit\tpost",
       "2026-10-12 10:28:28\tengage_run\tworker\t1.1\tdone\treply https://x.com/a/status/7 DONE",
-      "2026-10-12 10:26:45\tpublish_result\tclient1-state\t1.4\tfailed\ttwitter:fail:draft",
+      "2026-10-12 10:26:45\tpublish_result\tstate-helper\t1.4\tfailed\ttwitter:fail:draft",
       "2026-10-12 09:00:20\tbrowser_task\tbatch-read\t\tallowed\thttps://x.com/home",
     ].join("\n");
     const a = parseClientAudit(t);
     expect(a.map((x) => `${x.platform}:${x.kind}`)).toEqual(["other:approved", "other:rejected", "other:edited", "x:reply", "x:publish_failed"]);
     expect(a.some((x) => x.detail.includes("U0000000001"))).toBe(false);
   });
-  it("client0 dry-run rows are not counted as posts", () => {
+  it("example-owner dry-run rows are not counted as posts", () => {
     const t = [
       "ts_ist\tevent\tby\tref\toutcome\tdetail",
       "2026-10-12 17:40:40\tpublish\tU0000000001\t1.5\tissued\taddToQueue x",
-      "2026-10-12 17:40:40\tpublish_result\tclient0-state\t1.5\tdry_run\tPUBLISH_DRY_RUN: addToQueue x; nothing sent to Buffer/X/LinkedIn/Facebook",
+      "2026-10-12 17:40:40\tpublish_result\tstate-helper\t1.5\tdry_run\tPUBLISH_DRY_RUN: addToQueue x; nothing sent to Buffer/X/LinkedIn/Facebook",
       "2026-10-12 17:41:00\tengage\tU0000000001\t1.6\tdry_run\treply https://x.com/a/status/9; nothing queued or sent",
     ].join("\n");
     const a = parseClientAudit(t);
@@ -193,8 +193,8 @@ describe("collector + admin-only access", () => {
     cfgFile = path.join(dir, "clients.yaml");
     fs.writeFileSync(cfgFile, `${repo}
 clients:
-  - key: client0
-    name: "Client 0"
+  - key: example-owner
+    name: "Example Owner"
     plan: viral
     start_date: "2026-10-12"
     sources:
@@ -208,15 +208,15 @@ clients:
       ai_spend_log: ${dir}/spend.log
       buffer_key_file: ${dir}/no-buffer.env
       state_helper_url: http://helper0.test
-  - key: client1
-    name: "Client 1"
+  - key: example-client
+    name: "Example Client"
     plan: viral
     start_date: "2026-10-12"
     sources:
       guardrails_yaml: ${dir}/g.yaml
       audit_log: ${dir}/audit.tsv
       state_helper_url: http://helper.test
-      n8n_inbound_workflow: "Client1 bot"
+      n8n_inbound_workflow: "Example Client bot"
 `);
     process.env.CLIENTS_CONFIG_PATH = cfgFile;
   });
@@ -231,7 +231,7 @@ clients:
     if (url === "http://helper0.test/engage/status") return j({ approved_today: 0, cap: 8 });
     if (url === "http://helper.test/guard/limits") return j({ summary: "X: replies 3/12, posts 0/6; LinkedIn: approval-only comments 0/2, posts 0/1", spend: { spent: 0.15, budget: 35 } });
     if (url === "http://helper.test/engage/status") return j({ approved_today: 1, cap: 12 });
-    if (url.startsWith("http://n8n.test/api/v1/workflows")) return j({ data: [{ id: "wf1", name: "Client1 bot" }] });
+    if (url.startsWith("http://n8n.test/api/v1/workflows")) return j({ data: [{ id: "wf1", name: "Example Client bot" }] });
     if (url.startsWith("http://n8n.test/api/v1/executions")) return j({ data: [{ id: "11", status: "success", startedAt: new Date().toISOString() }, { id: "12", status: "error", startedAt: new Date().toISOString() }], nextCursor: null });
     return new Response("no", { status: 404 });
   }) as typeof fetch;
@@ -244,12 +244,12 @@ clients:
     expect(calls.every((c) => c.method === "GET")).toBe(true);
     expect(calls.some((c) => /x\.com|twitter|api\.buffer/.test(c.url))).toBe(false);
     expect(calls.some((c) => /\/tick/.test(c.url))).toBe(false);
-    const n0 = r1!.client0;
+    const n0 = r1!["example-owner"];
     expect(n0.find((n) => n.source === "x_inbound")!.info).toMatch(/skipped/);
     expect(n0.find((n) => n.source === "buffer")!.info).toMatch(/skipped/);
-    expect(await db.clientActivity.count({ where: { clientKey: "client0" } })).toBe(3); // no duplicates after 2 runs
-    expect(await db.clientActivity.count({ where: { clientKey: "client1", kind: "inbound" } })).toBe(1);
-    const prof = await db.clientProfile.findMany({ where: { clientKey: "client0" }, orderBy: { platform: "asc" } });
+    expect(await db.clientActivity.count({ where: { clientKey: "example-owner" } })).toBe(3); // no duplicates after 2 runs
+    expect(await db.clientActivity.count({ where: { clientKey: "example-client", kind: "inbound" } })).toBe(1);
+    const prof = await db.clientProfile.findMany({ where: { clientKey: "example-owner" }, orderBy: { platform: "asc" } });
     expect(prof.map((p) => `${p.platform}:${p.handle}`)).toEqual(["facebook:acct.page", "linkedin:acct-li", "x:@acct"]);
     expect(await db.collectorRun.count()).toBe(2);
   });
@@ -264,20 +264,20 @@ clients:
     expect(() => assertPlatformAdmin(member)).toThrow(/admins only/);
     expect(() => assertPlatformAdmin(null)).toThrow();
     await expect(clientsOverview(member)).rejects.toThrow(/admins only/);
-    await expect(clientDetail(member, "client0")).rejects.toThrow(/admins only/);
+    await expect(clientDetail(member, "example-owner")).rejects.toThrow(/admins only/);
     await expect(clientDetail(admin, "nobody")).rejects.toThrow(/No such client/);
     const now = new Date("2026-10-12T08:00:00Z");
     const o = await clientsOverview(admin, now);
-    const c0x = o.clients.find((c) => c.key === "client0")!.caps.find((p) => p.platform === "x")!;
+    const c0x = o.clients.find((c) => c.key === "example-owner")!.caps.find((p) => p.platform === "x")!;
     expect(c0x.posts.label).toBe("1/4");
-    const c1x = o.clients.find((c) => c.key === "client1")!.caps.find((p) => p.platform === "x")!;
+    const c1x = o.clients.find((c) => c.key === "example-client")!.caps.find((p) => p.platform === "x")!;
     expect(c1x.replies!.label).toBe("3/8"); // helper count (3) beats the audit log (1)
-    const d = await clientDetail(admin, "client1", now);
+    const d = await clientDetail(admin, "example-client", now);
     expect(d.spend).toEqual({ spent: 0.15, budget: 35, pct: 0 });
     expect(d.t7).toMatchObject({ approved: 1, inbound: 1, replies: 1 });
-    const d0 = await clientDetail(admin, "client0", now);
+    const d0 = await clientDetail(admin, "example-owner", now);
     expect(d0.followers.map((f) => f.value)).toEqual([100, 112]);
-    expect(d0.spend.spent).toBe(0.5); // client0's own helper meter beats the shared spend log ($20.30)
+    expect(d0.spend.spent).toBe(0.5); // example-owner's own helper meter beats the shared spend log ($20.30)
     expect(c0x.replies!.label).toBe("2/8"); // helper count (2) beats the ledger (1)
     expect(d0.series7.linkedin.post[6]).toBe(1);
   });

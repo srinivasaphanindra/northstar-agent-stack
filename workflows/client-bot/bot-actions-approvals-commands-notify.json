@@ -1,6 +1,6 @@
 {
   "id": "FbTdLU9H465W10Yd",
-  "name": "Client1 bot: actions (approvals, commands, notify)",
+  "name": "Example Client bot: actions (approvals, commands, notify)",
   "active": false,
   "nodes": [
     {
@@ -517,7 +517,7 @@
           "__rl": true,
           "value": "lP4iZYQA5jvtNaiD",
           "mode": "id",
-          "cachedResultName": "Client1 engage: drafter (X, 2x/day)"
+          "cachedResultName": "Example Client engage: drafter (X, 2x/day)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
@@ -594,7 +594,7 @@
           "__rl": true,
           "value": "bsVhx7Sp3eHcvWsh",
           "mode": "id",
-          "cachedResultName": "Client1 coach: action lists (2x/day)"
+          "cachedResultName": "Example Client coach: action lists (2x/day)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",

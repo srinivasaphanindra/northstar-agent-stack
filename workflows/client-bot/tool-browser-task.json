@@ -1,6 +1,6 @@
 {
   "id": "YB9lz9pnKolDfFiX",
-  "name": "Tool: Browser task (client1)",
+  "name": "Tool: Browser task (example-client)",
   "active": false,
   "nodes": [
     {
@@ -39,7 +39,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-browser-task",
+        "path": "example-client-browser-task",
         "responseMode": "lastNode",
         "options": {}
       }
@@ -150,7 +150,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "\nreturn [{ json: { status: 'refused', result_text: 'NOT RUN: ' + String($json.message || 'the browser gate (client1-state) did not answer, so nothing was opened. Try again in a minute.'),\n  urls_visited: [], steps: 0, reason: $json.reason || 'gate_unavailable' } }];\n"
+        "jsCode": "\nreturn [{ json: { status: 'refused', result_text: 'NOT RUN: ' + String($json.message || 'the browser gate (state-helper) did not answer, so nothing was opened. Try again in a minute.'),\n  urls_visited: [], steps: 0, reason: $json.reason || 'gate_unavailable' } }];\n"
       }
     }
   ],

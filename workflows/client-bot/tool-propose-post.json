@@ -1,6 +1,6 @@
 {
   "id": "FBNBcOKeRVx0gMHw",
-  "name": "Tool: Propose post (client1)",
+  "name": "Tool: Propose post (example-client)",
   "active": false,
   "nodes": [
     {
@@ -149,7 +149,7 @@
           "__rl": true,
           "value": "GNeJLCKN53xXlgA4",
           "mode": "id",
-          "cachedResultName": "Tool: Buffer post (client1)"
+          "cachedResultName": "Tool: Buffer post (example-client)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",

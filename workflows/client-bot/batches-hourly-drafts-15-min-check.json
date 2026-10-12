@@ -1,6 +1,6 @@
 {
   "id": "egzwmJyVfZ6uQiT1",
-  "name": "Client1 batches: hourly drafts (15 min check)",
+  "name": "Example Client batches: hourly drafts (15 min check)",
   "active": false,
   "nodes": [
     {
@@ -690,7 +690,7 @@
           "__rl": true,
           "value": "FBNBcOKeRVx0gMHw",
           "mode": "id",
-          "cachedResultName": "Tool: Propose post (client1)"
+          "cachedResultName": "Tool: Propose post (example-client)"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",

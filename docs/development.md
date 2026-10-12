@@ -11,15 +11,15 @@ npm run slack:live-check   # optional: a throwaway Slack workspace only, read-on
 ```
 Tests run with `LLM_MODE=mock` and `PUBLISH_DRY_RUN=true`. Slack is tested against the local fake API in `tests/harness/`.
 
-## client1-state
+## state-helper
 ```bash
-python3 client1-state/tests/test_batches.py
-python3 client1-state/tests/test_viral.py    # hourly_pacing_and_random_gap is a known time-of-day flake
-python3 client1-state/tests/test_fix3.py
+python3 state-helper/tests/test_batches.py
+python3 state-helper/tests/test_viral.py    # hourly_pacing_and_random_gap is a known time-of-day flake
+python3 state-helper/tests/test_fix3.py
 ```
 
 ## Services
-`bin/northstar-app-up.sh`, `bin/client1-state-up.sh`, `bin/n8n-up.sh`, `bin/browser-agent-up.sh` (`start|stop|status`).
+`bin/northstar-app-up.sh`, `bin/state-helper-up.sh`, `bin/n8n-up.sh`, `bin/browser-agent-up.sh` (`start|stop|status`).
 `bin/services-watchdog.sh ensure` keeps them all up. Runtime files go to `.run/` (gitignored).
 
 ## Before you open a pull request

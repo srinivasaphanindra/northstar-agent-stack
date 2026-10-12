@@ -1,17 +1,17 @@
 """Unit tests for the Viral tier: caps, ramps, pacing, nudges, quiet hours, completion tracking (2026-10-12).
 Runs fully offline on a temp DB + temp guardrails.yaml copy; notifications off; no Slack, no browser, no LLM.
-Usage: python3 client1-state/tests/test_viral.py"""
+Usage: python3 state-helper/tests/test_viral.py"""
 import os, sys, json, shutil, tempfile, time, re, traceback
 from datetime import datetime, timedelta
 T = tempfile.mkdtemp(prefix="c1viral-")
-SRC = os.environ.get("C1_GUARDRAILS_SRC") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "clients", "client1", "guardrails.yaml")
+SRC = os.environ.get("CS_GUARDRAILS_SRC") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "templates", "guardrails.example.yaml")
 GY = f"{T}/guardrails.yaml"; shutil.copy(SRC, GY)
 # ramp-clock tests use their own fake "now"; the live warm-up start_date would pin the clock to 2026-10-12
 import re as _re; _y = open(GY).read(); open(GY, "w").write(_re.sub(r"(?m)^\s*start_date:.*\n", "", _y))
 open(f"{T}/notes.md", "w").write("# notes\n## Voice\nplain\n")
-os.environ.update(C1_DB=f"{T}/db.sqlite", C1_NOTES=f"{T}/notes.md", C1_PAUSE=f"{T}/PAUSE", C1_PAUSE_ALL=f"{T}/PAUSE_ALL",
-                  C1_LEDGER=f"{T}/ledger.tsv", C1_LOG=f"{T}/log", C1_GUARDRAILS=GY, C1_AUDIT=f"{T}/audit.tsv", C1_UPSELL=f"{T}/upsell.md",
-                  C1_NOTIFY="0", C1_WORKER="0", C1_OR_UPSTREAM="http://127.0.0.1:9")
+os.environ.update(CS_DB=f"{T}/db.sqlite", CS_NOTES=f"{T}/notes.md", CS_PAUSE=f"{T}/PAUSE", CS_PAUSE_ALL=f"{T}/PAUSE_ALL",
+                  CS_LEDGER=f"{T}/ledger.tsv", CS_LOG=f"{T}/log", CS_GUARDRAILS=GY, CS_AUDIT=f"{T}/audit.tsv", CS_UPSELL=f"{T}/upsell.md",
+                  CS_NOTIFY="0", CS_WORKER="0", CS_OR_UPSTREAM="http://127.0.0.1:9")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import server as S, coach as CO, guardrails as G
 S.init_db()
@@ -174,7 +174,7 @@ def ramp_warning_drops_one_step_and_restarts_clock():
 def auto_pause_records_ramp_warning():
     reset(); set_plan("viral"); k = c(); t0 = time.time() - 8 * 86400
     S.ramp_state(k, "x", now=t0); assert S.ramp_state(k, "x")["step"] == 1
-    S.set_pause(k, "auto: browser stopped on https://x.com/a/status/1: unusual activity", "client1-state")
+    S.set_pause(k, "auto: browser stopped on https://x.com/a/status/1: unusual activity", "state-helper")
     assert S.ramp_state(k, "x")["step"] == 0 and os.path.exists(f"{T}/PAUSE")
     assert k.execute("SELECT COUNT(*) FROM audit WHERE event='ramp_warning'").fetchone()[0] == 1
     k.close()

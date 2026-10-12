@@ -1,5 +1,5 @@
 // Read-only Clients collector (v0.3). Runs every 15 min from the worker (CLIENTS_COLLECTOR=true) or `npm run collect`.
-// Reads local files, the client1-state helper (GET, read-only endpoints only), n8n's executions API (GET) and,
+// Reads local files, the state-helper helper (GET, read-only endpoints only), n8n's executions API (GET) and,
 // only when a key file already exists, Buffer's GraphQL API with read queries. It never calls a platform write API
 // and makes no X API calls. Every source is optional: a missing file or a failed request is recorded and skipped.
 import YAML from "yaml";
@@ -103,7 +103,7 @@ export async function collectClient(c: ClientDef, opts: { fetch?: Fetch; now?: D
     return 1;
   });
 
-  // ---- client1-state helper: read-only GET endpoints only (/health, /guard/limits, /engage/status) ----
+  // ---- state-helper helper: read-only GET endpoints only (/health, /guard/limits, /engage/status) ----
   if (typeof s.state_helper_url === "string" && s.state_helper_url) {
     const base = s.state_helper_url.replace(/\/$/, "");
     await step(notes, "state_helper", async () => {

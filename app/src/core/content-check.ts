@@ -1,6 +1,6 @@
 // Approve-time content check (on top of the free regex check in guardrails.ts):
 //  1. "numbers must be in notes": any figure (price, %, count of customers, 5x, 10k...) must appear in the workspace notes.
-//  2. LLM classifier (rules.content.llm_check), same rubric as the client 1 n8n bot (CONTENT SAFETY CHECK v1).
+//  2. LLM classifier (rules.content.llm_check), same rubric as the the example client n8n bot (CONTENT SAFETY CHECK v1).
 // The classifier fails open (a human is approving anyway) but the skip is recorded on the draft and in the audit log.
 import { config } from "./config";
 import { chat, resolveKey } from "./llm";
@@ -8,7 +8,7 @@ import { notesText } from "./notes";
 import { spendStatus, platformSpendStatus } from "./usage";
 import type { Rules } from "./guardrails";
 
-// Port of client1-state guardrails.py NUM_RE / _norm_num.
+// Port of state-helper guardrails.py NUM_RE / _norm_num.
 const NUM_RE = /([₹$]\s?\d[\d,]*(\.\d+)?\s?(k|l|lakh|lakhs|crore|cr|m)?\b|\b\d[\d,]*(\.\d+)?\s?(%|x\b|k\+?(?=\W|$)|(lakh|crore|followers|customers|clients|leads|sales|users|downloads|reviews|stars|orders|bookings|patients)\b))/gi;
 const normNum = (s: string) => s.toLowerCase().replace(/[\s,]/g, "");
 

@@ -140,7 +140,7 @@ def effective(raw, plan=None):
     tier = (raw.get("tiers") or {}).get(plan) or {}
     eff = deep_merge(eff, tier)
     eff = deep_merge(eff, raw.get("overrides") or {})
-    eff["plan"], eff["client"] = plan, raw.get("client") or "client1"
+    eff["plan"], eff["client"] = plan, raw.get("client") or "example-client"
     eff["plan_label"] = str(tier.get("label") or plan.capitalize())
     return eff
 
@@ -157,7 +157,7 @@ class Config:
         except Exception as e:
             self.error = f"{type(e).__name__}: {e}"
             if self.data is None:
-                self.data = dict(BUILTIN, plan="builtin", client="client1", plan_label="Built-in defaults")
+                self.data = dict(BUILTIN, plan="builtin", client="example-client", plan_label="Built-in defaults")
         return self.data
     def for_plan(self, plan):
         """Effective config as if the file said plan: <plan> (dry runs, previews). Falls back to the current config."""
@@ -411,7 +411,7 @@ def upsell(path, ask, summary, by):
     p = expand(path)
     os.makedirs(os.path.dirname(p), exist_ok=True)
     if not os.path.exists(p):
-        open(p, "w").write("# Client 1: out-of-scope asks (possible upsells)\n\nLogged by the client bot. Newest at the bottom.\n\n"
+        open(p, "w").write("# Example Client: out-of-scope asks (possible upsells)\n\nLogged by the client bot. Newest at the bottom.\n\n"
                            "| When (IST) | Who | Ask | Summary |\n|---|---|---|---|\n")
     cell = lambda s: re.sub(r"[|\r\n]+", " ", scrub(str(s))).strip()[:300]
     with open(p, "a") as f:

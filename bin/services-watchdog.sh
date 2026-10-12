@@ -1,6 +1,6 @@
 #!/bin/bash
-# services-watchdog.sh — keeps the client-bot stack up: n8n (5678), client1 Chrome (CDP 9350, Xvfb :20, bwrap),
-# browser-agent (8770), client1-state helper (8771), northstar-app (web 3100 + worker).
+# services-watchdog.sh — keeps the client-bot stack up: n8n (5678), example-client Chrome (CDP 9350, Xvfb :20, bwrap),
+# browser-agent (8770), state-helper helper (8771), northstar-app (web 3100 + worker).
 # The box has NO cron daemon and no boot hook, so:
 #   services-watchdog.sh once         one check/repair pass (idempotent, quiet when healthy)
 #   services-watchdog.sh loop         foreground loop, a pass every ${WATCHDOG_INTERVAL:-300}s (single instance via flock)
@@ -22,11 +22,11 @@ pass(){
   if ! curl -fsS -m 5 http://127.0.0.1:5678/healthz >/dev/null 2>&1; then
     log "n8n DOWN -> n8n-up.sh"; "$B/n8n-up.sh" >> "$L" 2>&1 && log "n8n up" || log "ERROR n8n start failed"; fixed=1; fi
   if ! curl -s -m 4 http://127.0.0.1:9350/json/version 2>/dev/null | grep -q Browser; then
-    log "client1 chrome DOWN -> start"; "$B/client1-chrome.sh" start >> "$L" 2>&1 || log "ERROR client1 chrome start failed"; fixed=1; fi
+    log "example-client chrome DOWN -> start"; "$B/client-chrome.sh" start >> "$L" 2>&1 || log "ERROR example-client chrome start failed"; fixed=1; fi
   if ! curl -s -m 5 http://127.0.0.1:8770/health 2>/dev/null | grep -q '"service":"browser-agent"'; then
     log "browser-agent DOWN -> start"; "$B/browser-agent-up.sh" start >> "$L" 2>&1 || log "ERROR browser-agent start failed"; fixed=1; fi
-  if ! curl -s -m 4 http://127.0.0.1:8771/health 2>/dev/null | grep -q '"service": *"client1-state"'; then
-    log "client1-state DOWN -> start"; "$B/client1-state-up.sh" start >> "$L" 2>&1 || log "ERROR client1-state start failed"; fixed=1; fi
+  if ! curl -s -m 4 http://127.0.0.1:8771/health 2>/dev/null | grep -q '"service": *"state-helper"'; then
+    log "state-helper DOWN -> start"; "$B/state-helper-up.sh" start >> "$L" 2>&1 || log "ERROR state-helper start failed"; fixed=1; fi
   if ! "$B/northstar-app-up.sh" status >/dev/null 2>&1; then
     log "northstar-app DOWN -> start"; "$B/northstar-app-up.sh" start >> "$L" 2>&1 || log "ERROR northstar-app start failed"; fixed=1; fi
   # v0.5 self-heal supervisor (own flock; no-op if already running)
@@ -49,9 +49,9 @@ case "${1:-once}" in
   status)
     echo "loop: $(loop_alive && echo "running pid $(cat "$PIDF")" || echo 'NOT running')  last pass: $(cat "$HB" 2>/dev/null || echo never)"
     curl -fsS -m 5 http://127.0.0.1:5678/healthz >/dev/null 2>&1 && echo "n8n: up" || echo "n8n: DOWN"
-    "$B/client1-chrome.sh" status 2>/dev/null || true
+    "$B/client-chrome.sh" status 2>/dev/null || true
     curl -s -m 5 http://127.0.0.1:8770/health 2>/dev/null | grep -q '"status":"ok"' && echo "browser-agent: up" || echo "browser-agent: DOWN/degraded"
-    "$B/client1-state-up.sh" status >/dev/null 2>&1 && echo "client1-state: up" || echo "client1-state: DOWN"
+    "$B/state-helper-up.sh" status >/dev/null 2>&1 && echo "state-helper: up" || echo "state-helper: DOWN"
     "$B/northstar-app-up.sh" status 2>/dev/null | tr '\n' ' '; echo ;;
   *) echo "usage: $0 once|loop|ensure|status"; exit 2 ;;
 esac

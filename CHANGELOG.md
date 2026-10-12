@@ -6,6 +6,20 @@ All notable changes to this project. Versions follow the Northstar app tags. Dat
 - Public docs: README, `docs/` pages, CONTRIBUTING, SECURITY, LICENSE (proprietary, all rights reserved), issue/PR templates, release notes.
 - Removed the internal ops log and business plan from `docs/`. Roadmap scrubbed.
 
+## v0.5.1 — 2026-10-12
+
+Repo now contains only the Northstar system; client instances live outside the repo.
+
+### Changed
+- Client bot workflows are generic templates in `workflows/client-bot/` (placeholder names), the state helper is `state-helper/`, guardrails with the tier caps are `templates/guardrails.example.yaml` (+ `templates/notes.example.md`). New: `docs/new-client.md`.
+- `bin/client-chrome.sh` and `bin/state-helper-up.sh` take `CLIENT_KEY` / ports per instance. Self-heal checks a configurable list of instances (`SELFHEAL_INSTANCES`).
+- README, docs, SETUP, scripts and tests use a generic `example-client`.
+
+### Removed
+- Client instance files (guardrails, notes, owner template), client-named n8n workflow exports and the client-specific helper directory.
+
+History note: releases up to v0.5.0 shipped two named client instances (client0, client1); their files remain in earlier tags.
+
 ## v0.5.0 — 2026-10-12
 
 Local only: `PUBLISH_DRY_RUN=true`. No schema change; Northstar app unchanged.
@@ -14,23 +28,23 @@ Local only: `PUBLISH_DRY_RUN=true`. No schema change; Northstar app unchanged.
 - `selfheal/`: light self-heal supervisor (5 min loop via `services-watchdog.sh`): health checks, backoff-limited restarts through the service scripts, safe Chrome/tab reaping, one retry for allowlisted idempotent n8n workflows only, draft fixes (re-queue for rebuild, block `<<<`), audit TSV and JSON alerts. Hard limits enforced in code and tests.
 
 ### Fixed
-- Chrome pile-up: under load the 3 s CDP check failed and `start` removed the profile's Singleton lock and launched another sandboxed Chrome on the same profile (bwrap's pid namespace hides the lock owner). `bin/client1-chrome.sh` now waits 10 s (`CDP_TIMEOUT`) and refuses to launch while a Chrome for the profile is alive.
-- client0-state: dry-run publishes are logged as `dry_run`, not `issued`, so they no longer count toward the daily caps (documented in `clients/client0/README.md`). client1-state unchanged (no dry-run publish path).
+- Chrome pile-up: under load the 3 s CDP check failed and `start` removed the profile's Singleton lock and launched another sandboxed Chrome on the same profile (bwrap's pid namespace hides the lock owner). `bin/client-chrome.sh` now waits 10 s (`CDP_TIMEOUT`) and refuses to launch while a Chrome for the profile is alive.
+- the state helper: dry-run publishes are logged as `dry_run`, not `issued`, so they no longer count toward the daily caps (documented in `the owner templateREADME.md`). the state helper unchanged (no dry-run publish path).
 
 ## v0.4.0 — 2026-10-12
 
 Local demo only: `PUBLISH_DRY_RUN=true`. No schema change.
 
 ### Added
-- Clients collector reads the new client0 helper (`client0-state`, `CLIENT0_STATE_URL`, default 127.0.0.1:8772, GET `/health`, `/guard/limits`, `/engage/status`), client0's audit log and the n8n "Client0 bot" executions: client 0 now runs through Slack #client0 like client 1 (dry run).
+- Clients collector reads the new the owner instance helper (`the state helper`, `CLIENT_STATE_URL`, default 127.0.0.1:8772, GET `/health`, `/guard/limits`, `/engage/status`), the owner instance's audit log and the n8n "the owner instance bot" executions: the owner instance now runs through Slack #the owner instance like the pilot client (dry run).
 - Dry-run approvals (`publish_result dry_run`, `engage dry_run`) are a separate `dry_run` kind: shown as "dry-run approvals (not posted)", never counted as posts or replies.
 - A client's own helper AI meter takes precedence over the shared OpenRouter spend log.
 
 ### Added (stack)
-- `clients/client0/`: template for running the owner's own accounts through Slack like client 1 (guardrails with placeholders, notes example, README: client0-state dry-run patch, n8n cloning rules, test round trip).
+- `the owner template`: template for running the owner's own accounts through Slack like the pilot client (guardrails with placeholders, notes example, README: the state helper dry-run patch, n8n cloning rules, test round trip).
 
 ### Tests
-- vitest 61/61 (new: client0 dry-run rows, helper spend precedence, client0 helper caps). Headless E2E not re-run (box overloaded, no new Chrome); unchanged pages.
+- vitest 61/61 (new: the owner instance dry-run rows, helper spend precedence, the owner instance helper caps). Headless E2E not re-run (box overloaded, no new Chrome); unchanged pages.
 
 ## v0.3.0 — 2026-10-12
 
@@ -48,8 +62,8 @@ Local demo only: `PUBLISH_DRY_RUN=true`. Existing databases need `npx prisma db 
 
 ## v0.2.0 — 2026-10-12
 
-First version of this stack repo: Northstar app v0.2.0, 14 client 1 n8n workflows (inactive, no credentials), the
-`client1-state` helper, `browser-agent`, guardrails templates, service scripts and SETUP.md. Local demo only:
+First version of this stack repo: Northstar app v0.2.0, 14 the pilot client n8n workflows (inactive, no credentials), the
+`the state helper` helper, `browser-agent`, guardrails templates, service scripts and SETUP.md. Local demo only:
 `PUBLISH_DRY_RUN=true`, Buffer OAuth off (no `BUFFER_CLIENT_ID`), no Slack token.
 
 ### Added

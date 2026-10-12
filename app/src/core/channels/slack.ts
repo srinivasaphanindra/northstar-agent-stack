@@ -1,4 +1,4 @@
-// Slack connector (phase 1): per-tenant bot token, polls one channel (like the client 1 bot) because the
+// Slack connector (phase 1): per-tenant bot token, polls one channel (like the the example client bot) because the
 // box has no inbound URL. Phase 2: Events API + "Add to Slack" OAuth on the VPS.
 // Polls conversations.history + replies of recently active threads. Approvals by typed
 // `approve <code>` / `reject <code>` from the Slack users listed as approvers.

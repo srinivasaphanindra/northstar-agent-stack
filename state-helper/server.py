@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""client1-state: small local helper for the n8n 'Client1 bot' (127.0.0.1:8771, stdlib only).
+"""state-helper: small local helper for the n8n 'Example Client bot' (127.0.0.1:8771, stdlib only).
 
 Owns everything that must survive n8n restarts or be enforced outside the LLM:
   * chat memory per Slack thread (SQLite, last 20 turns)          GET /context, POST /memory
-  * client notes file ~/agency/clients/client1/notes.md            (read every turn; 'remember:' appends)
+  * client notes file ~/agency/clients/example-client/notes.md            (read every turn; 'remember:' appends)
   * approval proposals (Buffer post previews + engagement ideas)   POST /proposals, GET /tick, POST /op, POST /op/finish
   * engagement trial (X @your_x_handle): kill switch file, daily cap 5, >=7 min random gaps, ledger TSV,
     and the ONLY code path that calls the browser agent with allow_write + X-Approved: yes (after a human approval).
 n8n never gets write access to the browser itself; it can only hand an approved proposal to this queue.
 
-Guardrails (2026-10-12, guardrails.py + ~/agency/clients/client1/guardrails.yaml), enforced HERE in code:
+Guardrails (2026-10-12, guardrails.py + ~/agency/templates/guardrails.example.yaml), enforced HERE in code:
   * per-platform daily caps (posts + engagement), allowed actions, copy-paste reply check
   * pre-publish content check: regex (free) + cheap LLM classifier verdict (run by n8n, judged here), fail closed
   * approvals only from configured approvers; 'pause everything' kill switch (PAUSE_ALL file), resume by owner only
@@ -41,18 +41,18 @@ from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
 HOME = os.path.expanduser("~")
-CLIENT_DIR = os.environ.get("C1_CLIENT_DIR", f"{HOME}/agency/clients/client1")
-DB = os.environ.get("C1_DB", f"{CLIENT_DIR}/bot-state.sqlite")
-NOTES = os.environ.get("C1_NOTES", f"{CLIENT_DIR}/notes.md")
-PAUSE = os.environ.get("C1_PAUSE", f"{HOME}/agency/state/PAUSE-client1-engage")
-LEDGER = os.environ.get("C1_LEDGER", f"{HOME}/agency/state/client1-engage-ledger.tsv")
-LOG = os.environ.get("C1_LOG", f"{HOME}/agency/logs/client1-state.log")
-PAUSE_ALL = os.environ.get("C1_PAUSE_ALL", f"{HOME}/agency/state/PAUSE-client1-all")   # NOT the agency-wide state/PAUSE_ALL
-GUARD = G.Config(os.environ.get("C1_GUARDRAILS", f"{CLIENT_DIR}/guardrails.yaml"))
-NOTIFY = os.environ.get("C1_NOTIFY", "1") == "1"          # owner notifications via ~/agency/bin/notify.sh
-OR_UPSTREAM = os.environ.get("C1_OR_UPSTREAM", "https://openrouter.ai/api/v1")
-BROWSER = os.environ.get("C1_BROWSER", "http://127.0.0.1:8770")
-PORT = int(os.environ.get("C1_PORT", "8771"))
+CLIENT_DIR = os.environ.get("CS_CLIENT_DIR", f"{HOME}/agency/clients/example-client")
+DB = os.environ.get("CS_DB", f"{CLIENT_DIR}/bot-state.sqlite")
+NOTES = os.environ.get("CS_NOTES", f"{CLIENT_DIR}/notes.md")
+PAUSE = os.environ.get("CS_PAUSE", f"{HOME}/agency/state/PAUSE-example-client-engage")
+LEDGER = os.environ.get("CS_LEDGER", f"{HOME}/agency/state/example-client-engage-ledger.tsv")
+LOG = os.environ.get("CS_LOG", f"{HOME}/agency/logs/state-helper.log")
+PAUSE_ALL = os.environ.get("CS_PAUSE_ALL", f"{HOME}/agency/state/PAUSE-example-client-all")   # NOT the agency-wide state/PAUSE_ALL
+GUARD = G.Config(os.environ.get("CS_GUARDRAILS", f"{CLIENT_DIR}/guardrails.yaml"))
+NOTIFY = os.environ.get("CS_NOTIFY", "1") == "1"          # owner notifications via ~/agency/bin/notify.sh
+OR_UPSTREAM = os.environ.get("CS_OR_UPSTREAM", "https://openrouter.ai/api/v1")
+BROWSER = os.environ.get("CS_BROWSER", "http://127.0.0.1:8770")
+PORT = int(os.environ.get("CS_PORT", "8771"))
 CHANNEL = "C0000000001"
 OWNER = "U0000000001"                 # only the owner can approve / resume / remember
 OWN_HANDLE = "your_x_handle"
@@ -69,7 +69,7 @@ TOPICS = [  # client niche (rotates per run)
 ]
 LINT = "/workspace/social/reply-lint.py"
 LOCK = threading.RLock()
-WORKER_ON = os.environ.get("C1_WORKER", "1") == "1"
+WORKER_ON = os.environ.get("CS_WORKER", "1") == "1"
 
 
 def now_ist():
@@ -183,7 +183,7 @@ def write_onboarding(client, block, dry=False):
     """Replace (or insert) the onboarding block in ~/agency/clients/<client>/notes.md."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", client or ""):
         raise ValueError("bad client slug")
-    path = NOTES if client == "client1" else f"{os.path.dirname(CLIENT_DIR)}/{client}/notes.md"
+    path = NOTES if client == "example-client" else f"{os.path.dirname(CLIENT_DIR)}/{client}/notes.md"
     cur = open(path).read() if os.path.exists(path) else f"# {client}: notes for the bot\n"
     blk = f"{OB_START}\n{block.strip()}\n{OB_END}\n"
     if OB_START in cur and OB_END in cur:
@@ -249,10 +249,10 @@ def cfg():
     return GUARD.get()
 
 def audit_path():
-    return os.environ.get("C1_AUDIT") or (cfg().get("audit") or {}).get("log") or f"{CLIENT_DIR}/audit-log.tsv"
+    return os.environ.get("CS_AUDIT") or (cfg().get("audit") or {}).get("log") or f"{CLIENT_DIR}/audit-log.tsv"
 
 def upsell_path():
-    return os.environ.get("C1_UPSELL") or (cfg().get("scope") or {}).get("upsell_log") or f"{CLIENT_DIR}/upsell-log.md"
+    return os.environ.get("CS_UPSELL") or (cfg().get("scope") or {}).get("upsell_log") or f"{CLIENT_DIR}/upsell-log.md"
 
 def audit_ev(c, event, by="", ref="", outcome="", detail="", dry=False):
     """Every action / guard decision. Dry runs are not written (they are only returned)."""
@@ -311,7 +311,7 @@ def notify_owner(text, dry=False):
     if dry or not NOTIFY:
         return False
     try:
-        subprocess.Popen([f"{HOME}/agency/bin/notify.sh", "[client1 bot] " + G.scrub(text)[:600]],
+        subprocess.Popen([f"{HOME}/agency/bin/notify.sh", "[example-client bot] " + G.scrub(text)[:600]],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except Exception as e:
@@ -368,9 +368,9 @@ def spend_thresholds(c):
             c.execute("INSERT OR REPLACE INTO kv(k, v) VALUES(?,?)", (k, str(time.time())))
             if lvl == s["level"]:       # only the highest new level is announced
                 outbox_add(c, msgs[lvl])
-                audit_ev(c, "spend_" + lvl, "client1-state", s["month"], f"{s['pct']}%", f"${s['spent']:.2f} of ${s['budget']:.2f}")
+                audit_ev(c, "spend_" + lvl, "state-helper", s["month"], f"{s['pct']}%", f"${s['spent']:.2f} of ${s['budget']:.2f}")
                 if lvl != "warn":
-                    notify_owner(f"client1 AI spend {s['pct']:.0f}% of ${s['budget']:.0f} this month ({lvl}).")
+                    notify_owner(f"example-client AI spend {s['pct']:.0f}% of ${s['budget']:.0f} this month ({lvl}).")
     return s
 
 def record_spend(row):
@@ -481,10 +481,10 @@ def ramp_state(c, platform, eff=None, now=None, write=True):
     if write and (st is None or changed):
         c.execute("INSERT OR REPLACE INTO kv(k, v) VALUES(?,?)", (k, json.dumps(st2)))
         if changed:
-            audit_ev(c, "ramp_up", "client1-state", platform, f"step {st2['step'] + 1}", f"plan {eff['plan']}: a week without warnings")
+            audit_ev(c, "ramp_up", "state-helper", platform, f"step {st2['step'] + 1}", f"plan {eff['plan']}: a week without warnings")
     return {**st2, "enabled": True}
 
-def ramp_warning(c, platform, reason, by="client1-state", dry=False, eff=None, now=None):
+def ramp_warning(c, platform, reason, by="state-helper", dry=False, eff=None, now=None):
     """Any warning (captcha, lock, 'unusual activity', limit notice) -> one step back and the weekly clock restarts."""
     eff = eff or cfg(); r = eff.get("ramp") or {}
     if not r.get("enabled"):
@@ -1037,13 +1037,13 @@ def op(c, b):
                         + (f", {len(holds)} post(s) already in Buffer's queue are being moved back to drafts" if holds else "")
                         + ". Chat still works. Only the owner can say 'resume everything'.") + (" (dry run, nothing changed)" if dry else "")
         if not dry and by != OWNER:
-            notify_owner(f"'pause everything' was said in #client1 by <@{by}>. Say 'resume everything' there when it's safe.")
+            notify_owner(f"'pause everything' was said in #example-client by <@{by}>. Say 'resume everything' there when it's safe.")
         return out
     if o == "resume_all":
         if by not in (cfg()["audit"].get("resume_all_by") or [OWNER]):
             audit_ev(c, "resume_all", by, "", "refused:not_owner", "", dry)
             out["reply"] = "Only the owner can resume everything, so a pause can't be undone by accident. I've let him know you'd like it back on."
-            if not dry: notify_owner(f"<@{by}> asked to 'resume everything' in #client1. Only you can do it.")
+            if not dry: notify_owner(f"<@{by}> asked to 'resume everything' in #example-client. Only you can do it.")
             return out
         pa, pr = pause_all_info()
         if not pa:
@@ -1065,12 +1065,12 @@ def op(c, b):
         audit_ev(c, "secret_pasted", by, b.get("ts", ""), "deleted" if can_del else "warned", "(content not stored)", dry)
         out["reply"] = G.msg("secret_deleted" if can_del else "secret")
         if can_del and not dry: out["delete_ts"] = b.get("ts")
-        if not dry: notify_owner(f"A password-like message was posted in #client1 by <@{by}> (ts {b.get('ts','')}). "
+        if not dry: notify_owner(f"A password-like message was posted in #example-client by <@{by}> (ts {b.get('ts','')}). "
                                  + ("Bot deleted it." if can_del else "Bot can't delete it (no scope): asked them to delete it and change the password."))
         return out
     if o == "signin_request":
         audit_ev(c, "signin_request", by, "", "notified", "", dry)
-        if not dry: notify_owner(f"<@{by}> asked for a sign-in link in #client1. Run: ~/agency/bin/signin-link.sh start client1 --minutes 30")
+        if not dry: notify_owner(f"<@{by}> asked for a sign-in link in #example-client. Run: ~/agency/bin/signin-link.sh start example-client --minutes 30")
         out["reply"] = ("OK, I've asked the owner for a one-time sign-in link. You'll open it, log in yourself in a private browser window, "
                         "and close it. I never see or store the password.") + (" (dry run, not sent)" if dry else "")
         return out
@@ -1079,11 +1079,11 @@ def op(c, b):
         if not dry:
             G.upsell(upsell_path(), ask, summ, by)
             if cfg()["scope"].get("notify_owner", True):
-                notify_owner(f"Out-of-scope ask in #client1 from <@{by}>: {summ or ask[:200]} (logged in clients/client1/upsell-log.md)")
+                notify_owner(f"Out-of-scope ask in #example-client from <@{by}>: {summ or ask[:200]} (logged in clients/example-client/upsell-log.md)")
         audit_ev(c, "out_of_scope", by, b.get("ts", ""), "logged", summ or ask[:200], dry)
         out["reply"] = ""; out["logged"] = not dry; return out
     if o == "pause":
-        n = set_pause(c, b.get("text") or "said 'pause engagement' in #client1", by, dry)
+        n = set_pause(c, b.get("text") or "said 'pause engagement' in #example-client", by, dry)
         audit_ev(c, "engage_pause", by, "", "paused", b.get("text") or "", dry)
         out["reply"] = (f"Engagement paused. {n} queued action(s) cancelled. Nothing will be liked, commented or reposted, and no new suggestions run. "
                         "Say 'resume engagement' to restart.") + (" (dry run, not saved)" if dry else "")
@@ -1161,17 +1161,17 @@ def op(c, b):
                             + f"{G.PLATFORM_NAMES[p]}'s terms restrict automation, so we stay careful. Posts through Buffer and your own activity are not affected; "
                             "keep it light for a day or two." + (" (dry run)" if dry else ""))
             if not dry and by != OWNER:
-                notify_owner(f"<@{by}> reported a {p} warning in #client1: {str(b.get('text') or '')[:150]}")
+                notify_owner(f"<@{by}> reported a {p} warning in #example-client: {str(b.get('text') or '')[:150]}")
             return out
         new = ramp_warning(c, p, b.get("text") or f"reported by {by} in Slack", by, dry)
-        n = set_pause(c, f"warning on {G.PLATFORM_NAMES.get(p, p)} reported by <@{by}> in #client1", by, dry) if p == "x" else 0
+        n = set_pause(c, f"warning on {G.PLATFORM_NAMES.get(p, p)} reported by <@{by}> in #example-client", by, dry) if p == "x" else 0
         out["reply"] = (f"Thanks for telling me. I've noted the {G.PLATFORM_NAMES.get(p, p)} warning"
                         + (f", stepped the warm-up back to week {new['step'] + 1}" if new else "")
                         + (f" and paused automated engagement ({n} queued cancelled)" if p == "x" else "")
                         + ". Please keep your own activity light for a day or two (a few replies, no bursts). "
                         + ("the owner can say 'resume engagement' when it looks fine." if p == "x" else "") + (" (dry run)" if dry else ""))
         if not dry and by != OWNER:
-            notify_owner(f"<@{by}> reported a {p} warning in #client1: {str(b.get('text') or '')[:150]}")
+            notify_owner(f"<@{by}> reported a {p} warning in #example-client: {str(b.get('text') or '')[:150]}")
         return out
     if o != "decide":
         return {"ok": False, "error": f"unknown op {o}"}
@@ -1285,7 +1285,7 @@ def op_finish(c, b):
         for r in res:
             if r.get("op") == "publish":
                 c.execute("UPDATE actions_log SET state=? WHERE kind='post' AND ref=? AND state='issued'", ("done" if r.get("ok") else "failed", r.get("post_id")))
-        audit_ev(c, "publish_result" if decision != "discard" else "discard_result", "client1-state", ts, state,
+        audit_ev(c, "publish_result" if decision != "discard" else "discard_result", "state-helper", ts, state,
                  "; ".join(f"{r.get('service')}:{'ok' if r.get('ok') else 'fail'}:{r.get('status') or r.get('error') or ''}" for r in res))
     skipped = (json.loads(p["result"] or "{}") if isinstance(p["result"], str) else {}).get("skipped_cap") or []
     if skipped and decision != "discard":
@@ -1302,7 +1302,7 @@ def hold_done(c, b):
             if r.get("ok"):
                 c.execute("UPDATE proposals SET state='pending', updated=? WHERE slack_ts=?", (time.time(), r.get("slack_ts")))
                 c.execute("UPDATE actions_log SET state='held' WHERE kind='post' AND ref=?", (r.get("post_id"),))
-        audit_ev(c, "pause_all_buffer_hold", "client1-state", "", f"{okc}/{len(res)}", json.dumps(res)[:300])
+        audit_ev(c, "pause_all_buffer_hold", "state-helper", "", f"{okc}/{len(res)}", json.dumps(res)[:300])
         txt = (f"Pause everything: {okc} of {len(res)} post(s) in Buffer's queue moved back to drafts."
                + ("" if okc == len(res) else " :warning: Some could not be moved; please pause the queue in Buffer yourself (Publish > the channel > Pause queue)."))
         outbox_add(c, txt)
@@ -1446,7 +1446,7 @@ X_KINDS = ("reply_trend", "creator_comment", "quote", "join_thread")
 PER_LIST_MAX = {"reply_trend": 4, "creator_comment": 3, "quote": 1, "join_thread": 1, "answer_own": 1, "li_comment": 1, "fb_comment": 1}
 
 def coach_eff(b):
-    """force_plan is honoured only in dry runs (tests of the coach while client1 stays on Starter)."""
+    """force_plan is honoured only in dry runs (tests of the coach while example-client stays on Starter)."""
     fp = str(b.get("force_plan") or "")
     return GUARD.for_plan(fp) if (b.get("dry_run") and fp) else cfg()
 
@@ -1938,7 +1938,7 @@ def switch_plan(c, b, out):
         audit_ev(c, "switch_plan", by, new, "refused:not_admin", "", dry)
         out["reply"] = "Only the owner can change the plan. I've let him know you're interested; he can walk you through what changes."
         if not dry:
-            notify_owner(f"<@{by}> asked to 'switch plan {new}' in #client1. Only admins can do it.")
+            notify_owner(f"<@{by}> asked to 'switch plan {new}' in #example-client. Only admins can do it.")
         return out
     plans = GUARD.plans()
     if new not in plans:
@@ -1973,7 +1973,7 @@ def switch_plan(c, b, out):
 BATCH_TAG = "APPROVAL BATCH DRAFTS v1"
 
 def batch_eff(b):
-    """force_plan is honoured only in dry runs (client1 stays on Starter)."""
+    """force_plan is honoured only in dry runs (example-client stays on Starter)."""
     fp = str(b.get("force_plan") or "")
     return GUARD.for_plan(fp) if (b.get("dry_run") and fp) else cfg()
 
@@ -2590,7 +2590,7 @@ def task_text(q):
 
 DANGER = re.compile(r"(STOPPED|captcha|unusual activity|suspicious|locked|restricted|suspended|verify|rate limit|try again later|checkpoint|sign in|log in|security check|temporarily blocked|limit(ed)? (your|this) account)", re.I)
 
-def platform_warning(c, platform, reason, by="client1-state", dry=False, announce=True, now=None):
+def platform_warning(c, platform, reason, by="state-helper", dry=False, announce=True, now=None):
     """LinkedIn/Facebook: any warning or checkpoint -> that platform's comments pause for warning_pause_days (default 7) at 0,
     queued comments there are cancelled, and on a ramped plan the platform's warm-up restarts at week 1. X keeps running."""
     now = float(now or time.time())
@@ -2610,7 +2610,7 @@ def platform_warning(c, platform, reason, by="client1-state", dry=False, announc
             outbox_add(c, f":warning: {P_} showed a warning or checkpoint while I was working:\n> {str(reason)[:300]}\n"
                           f"I stopped right away. {P_} comments are paused for {days:.0f} days (until {fmt(datetime.fromtimestamp(until, IST))}) and drop to 0 a day; "
                           f"{len(rows)} queued comment(s) cancelled. X and posts through Buffer are not affected. Please open {P_} yourself and clear anything it asks for.")
-            notify_owner(f"{platform} warning/checkpoint for client1: comments paused {days:.0f} days. {str(reason)[:150]}")
+            notify_owner(f"{platform} warning/checkpoint for example-client: comments paused {days:.0f} days. {str(reason)[:150]}")
     audit_ev(c, "platform_pause", by, platform, f"{days:.0f}d", str(reason)[:200], dry)
     return len(rows), until
 
@@ -2707,7 +2707,7 @@ def tick_worker():
                 platform_warning(c, pf, f"browser stopped on {q['url']}: {txt[:200]}", "worker")
                 outbox_add(c, f"STOPPED before/while commenting: {txt[:300]}. {G.PLATFORM_NAMES[pf]} comments are paused for 7 days.", q["slack_ts"])
             else:
-                n = set_pause(c, f"auto: browser stopped on {q['url']}: {txt[:200]}", "client1-state")
+                n = set_pause(c, f"auto: browser stopped on {q['url']}: {txt[:200]}", "state-helper")
                 audit_ev(c, "engage_autopause", "worker", q["slack_ts"], "paused", txt[:200])
                 outbox_add(c, f"STOPPED before/while acting: {txt[:300]}. All engagement is now paused.", q["slack_ts"])
                 outbox_add(c, f":warning: Engagement paused automatically. The browser saw a warning/login/captcha-type page on X:\n> {txt[:300]}\n"
@@ -2803,7 +2803,7 @@ def handle_proxy(h, method):
             data, ctype = budget_stop_reply(model, stream)
             record_spend({"lane": lane, "purpose": purpose + ":blocked", "model": model, "cost": 0, "src": "blocked", "status": 0})
             if lane == "browser":
-                return h.send({"error": {"message": "client1 monthly AI budget used up (hard stop)", "code": 402}}, 402)
+                return h.send({"error": {"message": "example-client monthly AI budget used up (hard stop)", "code": 402}}, 402)
             h.send_response(200); h.send_header("Content-Type", ctype); h.send_header("Content-Length", str(len(data))); h.end_headers()
             h.wfile.write(data); return
         body["usage"] = {"include": True}
@@ -2819,7 +2819,7 @@ def handle_proxy(h, method):
     except urllib.error.HTTPError as e:
         r, status = e, e.code
     except Exception as e:
-        return h.send({"error": {"message": f"client1 proxy upstream error: {type(e).__name__}: {e}"}}, 502)
+        return h.send({"error": {"message": f"example-client proxy upstream error: {type(e).__name__}: {e}"}}, 502)
     ctype = r.headers.get("Content-Type") or "application/json"
     h.send_response(status)
     h.send_header("Content-Type", ctype)
@@ -2879,7 +2879,7 @@ class H(BaseHTTPRequestHandler):
         c = db()
         try:
             if u.path == "/health":
-                return self.send({"status": "ok", "service": "client1-state", "db": DB, "worker": WORKER_ON, "time": fmt(now_ist())})
+                return self.send({"status": "ok", "service": "state-helper", "db": DB, "worker": WORKER_ON, "time": fmt(now_ist())})
             if u.path == "/context":
                 th = qs.get("thread", "")
                 return self.send({"notes": read_notes()[:12000], "history": get_history(c, th, int(qs.get("turns", MEMORY_TURNS))),
@@ -2932,7 +2932,7 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 log(f"proxy error {type(e).__name__}: {e}")
                 try:
-                    return self.send({"error": {"message": f"client1 proxy error: {type(e).__name__}"}}, 502)
+                    return self.send({"error": {"message": f"example-client proxy error: {type(e).__name__}"}}, 502)
                 except Exception:
                     return
         b = self.body()

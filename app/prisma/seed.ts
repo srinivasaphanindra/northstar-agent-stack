@@ -1,4 +1,4 @@
-// Seeds a demo: platform admin, "Client 1 (demo)" (no real client credentials, nothing publishable),
+// Seeds a demo: platform admin, "Example Client (demo)" (no real client credentials, nothing publishable),
 // and a sample workspace waiting for payment. Idempotent. Passwords: random unless SEED_*_PASSWORD is set;
 // written to SEED_CREDENTIALS_FILE (chmod 600) when given, else printed once.
 import fs from "node:fs";
@@ -22,9 +22,9 @@ async function main() {
   const admin = await user(adminEmail, "Owner", aPw, true);
   const demo = await user("demo@example.com", "Demo Client", dPw, false);
 
-  let ws = await db.workspace.findFirst({ where: { name: "Client 1 (demo)" } });
+  let ws = await db.workspace.findFirst({ where: { name: "Example Client (demo)" } });
   if (!ws) {
-    ws = await createWorkspace(admin.u.id, { name: "Client 1 (demo)", city: "Hyderabad" });
+    ws = await createWorkspace(admin.u.id, { name: "Example Client (demo)", city: "Hyderabad" });
     await db.workspace.update({ where: { id: ws.id }, data: { plan: "solo", status: "active", onboardingStep: "done" } });
     await db.member.create({ data: { workspaceId: ws.id, userId: demo.u.id, role: "admin" } });
     await db.invoice.create({ data: { workspaceId: ws.id, plan: "solo", amountInr: 1999, status: "paid", method: "upi", reference: "DEMO-NOT-REAL", paidAt: new Date(), markedBy: admin.u.id } });

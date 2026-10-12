@@ -2,7 +2,7 @@
 
 Last updated 2026-10-12. Order: v0.1 → v0.2 → v0.3 → v0.4 (next 2 weeks) → v1.0 (VPS move) → Later.
 
-Sources: `app/STATUS.md`, the internal platform plan, the client 1 n8n bot (guardrails, Viral coach, hourly approval
+Sources: `app/STATUS.md`, the internal platform plan, the the example client n8n bot (guardrails, Viral coach, hourly approval
 batches) and internal competitor research (cited below as "research §n"; not published).
 
 ---
@@ -67,14 +67,14 @@ batches) and internal competitor research (cited below as "research §n"; not pu
 - Plan switch updates the workspace caps; usage page shows plan, warm-up week, caps and ceilings.
 
 **Tests**
-- Port the client1-state offline tests (`test_viral.py`, 29 tests) to vitest: ramp steps, caps per tier/platform,
+- Port the state-helper offline tests (`test_viral.py`, 29 tests) to vitest: ramp steps, caps per tier/platform,
   gaps/hourly limits, like refusal, batch decisions (run/wait/skip_ignored/still_there), coach tasks and score.
 - E2E: Starter workspace hits a cap and gets the refusal message; batch appears in approvals inbox; Viral workspace sees coach tasks.
 
 **Done when**
 - The three tiers with the numbers above are selectable in onboarding/billing, caps and warm-up are enforced in the
-  worker, batches and coach run in the app with the same behaviour as the n8n client 1 bot, tests green, and
-  client 1 could be moved off n8n.
+  worker, batches and coach run in the app with the same behaviour as the n8n the example client bot, tests green, and
+  the example client could be moved off n8n.
 
 ---
 
@@ -113,7 +113,7 @@ batches) and internal competitor research (cited below as "research §n"; not pu
   and a CRM lead card; a test prospect receives a 7-post sample week.
 
 **Done when**
-- Client 1 gets a correct weekly results report in Slack, at least one real buying-intent comment/DM becomes an
+- Example Client gets a correct weekly results report in Slack, at least one real buying-intent comment/DM becomes an
   approved reply plus a CRM lead card, and the sample week replaces the old audit in the sales flow; tests green.
 
 ---

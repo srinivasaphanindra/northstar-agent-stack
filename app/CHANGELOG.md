@@ -5,12 +5,12 @@
 Local demo only: `PUBLISH_DRY_RUN=true`. Demo DB backed up first; no schema change.
 
 ### Added
-- Clients collector reads the new client0 helper (`client0-state`, `CLIENT0_STATE_URL`, default 127.0.0.1:8772, GET `/health`, `/guard/limits`, `/engage/status`), client0's audit log and the n8n "Client0 bot" executions: client 0 now runs through Slack #client0 like client 1 (dry run).
+- Clients collector reads the new example-owner helper (`state-helper`, `OWNER_CLIENT_STATE_URL`, default 127.0.0.1:8772, GET `/health`, `/guard/limits`, `/engage/status`), example-owner's audit log and the n8n "Example Owner bot" executions: the example owner now runs through Slack #example-owner like the example client (dry run).
 - Dry-run approvals (`publish_result dry_run`, `engage dry_run`) are a separate `dry_run` kind: shown as "dry-run approvals (not posted)", never counted as posts or replies.
 - A client's own helper AI meter takes precedence over the shared OpenRouter spend log.
 
 ### Tests
-- vitest 61/61 (new: client0 dry-run rows, helper spend precedence, client0 helper caps). Headless E2E not re-run (box overloaded, no new Chrome); unchanged pages.
+- vitest 61/61 (new: example-owner dry-run rows, helper spend precedence, example-owner helper caps). Headless E2E not re-run (box overloaded, no new Chrome); unchanged pages.
 
 ## v0.3.0 — 2026-10-12
 

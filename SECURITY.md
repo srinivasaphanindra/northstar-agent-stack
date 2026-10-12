@@ -14,7 +14,7 @@
 Report privately through GitHub's **"Report a vulnerability"** button (Security tab → Advisories) on this repository.
 <!-- PLACEHOLDER: private security contact to be added by the owner. Do not put a personal email here. -->
 
-Please include the affected component (`app/`, `n8n/workflows/`, `client1-state/`, `browser-agent/`, `bin/`), the
+Please include the affected component (`app/`, `workflows/client-bot/`, `state-helper/`, `browser-agent/`, `bin/`), the
 steps to reproduce, and the impact. We aim to reply within 5 working days.
 
 ## Scope and notes

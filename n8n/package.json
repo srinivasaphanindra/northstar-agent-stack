@@ -2,7 +2,7 @@
   "name": "northstar-n8n",
   "version": "1.0.0",
   "private": true,
-  "description": "Self-hosted n8n for the client1 bot workflows",
+  "description": "Self-hosted n8n for the example-client bot workflows",
   "dependencies": {
     "n8n": "2.42.6"
   }

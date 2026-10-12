@@ -70,19 +70,19 @@ cd app
 cd ..
 ```
 
-## 5. client1-state helper (Python, no secrets)
+## 5. state-helper helper (Python, no secrets)
 
 ```bash
-python3 client1-state/tests/test_batches.py      # offline, temp dirs only
-python3 client1-state/tests/test_viral.py       # 28/29: hourly_pacing_and_random_gap is a known time-of-day flake upstream
-python3 client1-state/tests/test_fix3.py
-C1_PORT=8771 bin/client1-state-up.sh start        # runtime data in .run/client1/
+python3 state-helper/tests/test_batches.py      # offline, temp dirs only
+python3 state-helper/tests/test_viral.py       # 28/29: hourly_pacing_and_random_gap is a known time-of-day flake upstream
+python3 state-helper/tests/test_fix3.py
+CS_PORT=8771 bin/state-helper-up.sh start        # runtime data in .run/example-client/
 curl -s http://127.0.0.1:8771/health
 ```
 The n8n workflows call the helper at `127.0.0.1:8771` and the browser agent at `127.0.0.1:8770`; keep those ports
 if you run the workflows.
 
-## 6. n8n: install and import the client1 workflows
+## 6. n8n: install and import the example-client workflows
 
 ```bash
 cd n8n
@@ -101,15 +101,15 @@ these credentials in the n8n UI, never in files:
 |---|---|
 | Slack bot token (`slackApi` / header auth) | Slack poller, actions, propose-post, batches, coach, onboarding, read receipt |
 | Buffer API token (`httpHeaderAuth`, `Authorization: Bearer …`) | Tool: Buffer post, actions, propose-post |
-| OpenRouter via the client1-state meter (`openAiApi`, base URL `http://127.0.0.1:8771/or/v1`) | Client1 bot, drafters |
+| OpenRouter via the state-helper meter (`openAiApi`, base URL `http://127.0.0.1:8771/or/v1`) | Example Client bot, drafters |
 
 Replace the placeholder Slack channel/user ids (`C0000000001`, `U0000000001`) in the workflows and in
-`clients/client1/guardrails.yaml` with your own before activating anything. Keep workflows inactive for testing;
-the `Client1 bot: dry-run harness` webhooks (`/webhook/client1-dryrun-*`) work only after credentials are attached.
+`templates/guardrails.example.yaml` with your own before activating anything. Keep workflows inactive for testing;
+the `Example Client bot: dry-run harness` webhooks (`/webhook/example-client-dryrun-*`) work only after credentials are attached.
 
 ## 7. Optional: browser agent
 
-Needs a Chrome with CDP on 9350 (`bin/client1-chrome.sh`, requires `xvfb` + `bubblewrap`) and an OpenRouter key.
+Needs a Chrome with CDP on 9350 (`bin/client-chrome.sh`, requires `xvfb` + `bubblewrap`) and an OpenRouter key.
 ```bash
 sudo apt-get install -y xvfb bubblewrap python3-venv
 python3 -m venv browser-agent/.venv && browser-agent/.venv/bin/pip install -r browser-agent/requirements.txt
@@ -121,13 +121,13 @@ bin/browser-agent-up.sh start
 
 ```bash
 bin/northstar-app-up.sh stop
-bin/client1-state-up.sh stop
+bin/state-helper-up.sh stop
 [ -f .run/state/n8n.pid ] && kill "$(cat .run/state/n8n.pid)"
 bin/browser-agent-up.sh stop 2>/dev/null || true
 rm -rf .run app/data                              # all runtime data (DBs, logs, logins)
 ```
 
-`bin/services-watchdog.sh ensure` keeps everything up (n8n, Chrome, browser agent, client1-state, app) if you want a
+`bin/services-watchdog.sh ensure` keeps everything up (n8n, Chrome, browser agent, state-helper, app) if you want a
 long-running setup. `bin/n8n-backup.sh` writes encrypted-credential backups to `.run/backups/n8n/`.
 
 ## Going live later (not part of this test)

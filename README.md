@@ -60,13 +60,12 @@ workspace's settings, not the plan caps.
 - Admin page: workspaces, mark invoices paid, usage, failed jobs, audit log.
 - **Admin Clients dashboard** (v0.3, `/admin/clients`, admin-only, mobile-first): per-client profile links, today's posts/replies/comments against the Viral warm-up caps, and a 7/30-day analytics page (activity per platform, approvals, inbound handled, impressions where available, followers, AI spend vs budget, recent activity). Filled by a read-only collector every 15 min that never calls platform write APIs or the X API.
 
-**Client 1 stack** (the production pilot, run on n8n)
-- 14 n8n workflows (exported **inactive**, with no credentials): Slack poller, bot, approvals/commands, hourly approval batches, Viral coach, X engagement drafter, Buffer post tool, browser task tool, onboarding interview.
-- `client1-state`: a stdlib-only Python helper for memory, guardrails, approvals, batches and the coach, with offline tests.
-- Client 0 template (`clients/client0/`, v0.4): run your own accounts through Slack like client 1, dry run (approvals logged, nothing published).
+**Client-bot templates** (one instance per client, run on n8n; instances live outside this repo, see [docs/new-client.md](docs/new-client.md))
+- 14 n8n workflow templates in `workflows/client-bot/` (inactive, no credentials, placeholder names): Slack poller, bot, approvals/commands, hourly approval batches, Viral coach, X engagement drafter, Buffer post tool, browser task tool, onboarding interview.
+- `state-helper`: a stdlib-only Python helper for memory, guardrails, approvals, batches and the coach, with offline tests.
 - `browser-agent`: a browser-use HTTP service for read-only browsing tasks, with a domain allow-list and metered spend.
 
-**Tests:** 61 vitest tests, typecheck clean, headless E2E 19/19 (v0.3.0), plus the `client1-state` offline tests.
+**Tests:** 61 vitest tests, typecheck clean, headless E2E 19/19 (v0.3.0), plus the `state-helper` offline tests.
 
 **Not yet done:** see [app/STATUS.md](app/STATUS.md) and the [roadmap](docs/roadmap.md). Tier caps in the app, real Slack/Buffer runs, web push/email, Postgres and the VPS move are all still to come.
 
@@ -81,8 +80,8 @@ flowchart LR
     worker[Worker: jobs + Slack poller] <--> db
   end
   slack <--> worker
-  subgraph Pilot["Client 1 pilot"]
-    n8n[n8n workflows] <--> state[client1-state helper :8771]
+  subgraph Pilot["Example Client pilot"]
+    n8n[n8n workflows] <--> state[state-helper helper :8771]
     n8n --> browser[browser agent :8770]
   end
   slack <--> n8n
@@ -122,7 +121,7 @@ Each component has a `.env.example`. Copy it to `.env` with `chmod 600` and neve
 | `PLATFORM_DAILY_AI_CAP_USD` | Platform-wide daily AI hard stop |
 | `CHANNEL_WORKERS`, `CHANNEL_TELEGRAM`, `SLACK_POLL_SECONDS` | Chat channel workers and flags |
 
-The full list (n8n, browser agent and client1-state too) is in [docs/configuration.md](docs/configuration.md).
+The full list (n8n, browser agent and state-helper too) is in [docs/configuration.md](docs/configuration.md).
 
 ## Plans and guardrails
 
@@ -139,7 +138,7 @@ These apply to every plan:
 - **Replies only to accounts the client chose or follows.**
 - A kill switch, an AI budget and a content check (no fake reviews, guaranteed results, or medical or money promises).
 
-In v0.2.0 the tier caps run in the client 1 n8n stack (`clients/client1/guardrails.yaml`). Porting them into the app is
+In v0.2.0 the tier caps run in the the example client n8n stack (`templates/guardrails.example.yaml`). Porting them into the app is
 planned for v0.3. Details: [docs/guardrails.md](docs/guardrails.md).
 
 ## Roadmap

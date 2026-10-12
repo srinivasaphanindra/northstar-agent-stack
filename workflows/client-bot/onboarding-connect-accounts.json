@@ -1,6 +1,6 @@
 {
   "id": "Fa6P7r948OGSoicO",
-  "name": "Client onboarding: connect accounts (client1)",
+  "name": "Client onboarding: connect accounts (example-client)",
   "active": false,
   "nodes": [
     {
@@ -25,7 +25,7 @@
       ],
       "parameters": {
         "httpMethod": "POST",
-        "path": "client1-onboarding-connect",
+        "path": "example-client-onboarding-connect",
         "responseMode": "lastNode",
         "options": {}
       }
@@ -47,7 +47,7 @@
             {
               "id": "c1",
               "name": "client_slug",
-              "value": "client1",
+              "value": "example-client",
               "type": "string"
             },
             {
@@ -65,7 +65,7 @@
             {
               "id": "c4",
               "name": "slack_channel",
-              "value": "={{ ($json.body && $json.body.slack_channel) || '#client1-profile' }}",
+              "value": "={{ ($json.body && $json.body.slack_channel) || '#client-profile' }}",
               "type": "string"
             },
             {
